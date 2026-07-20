@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calzados Paredes – Línea Sport para Dama</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="Calzado.CSS">
+</head>
+<body>
+
+  <header class="header" id="mainHeader">
+    <div class="logo" onclick="scrollToTop()">
+      <img src="LOGO.png" alt="Calzados Paredes">
+    </div>
+    <nav class="header-nav">
+      <ul class="nav-links" id="navLinks">
+        <li><a href="#inicio" class="nav-link active" data-section="inicio">Inicio</a></li>
+        <li><a href="#modelos" class="nav-link" data-section="modelos">Modelos</a></li>
+        <li><a href="#nosotros" class="nav-link" data-section="nosotros">Nosotros</a></li>
+        <li><a href="#contacto" class="nav-link" data-section="contacto">Contacto</a></li>
+      </ul>
+      <button class="menu-toggle" id="menuToggle" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </nav>
+  </header>
+
+  <section class="hero-section" id="inicio">
+    <div class="hero-bg"></div>
+    <div class="hero-content"></div>
+    <div class="hero-btns">
+      <a href="#modelos" class="btn btn-gold">Ver Catálogo</a>
+      <a href="#nosotros" class="btn btn-outline">Nuestra Historia</a>
+    </div>
+  </section>
+
+  <div id="modelos" style="position:relative;top:0;height:0;pointer-events:none;"></div>
+  <section class="filters-section">
+    <div class="container">
+      <div class="row filters-header">
+        <div class="col-sm-7 col-xs-12">
+          <h2 class="section-title">Nuestros Modelos</h2>
+        </div>
+        <div class="col-sm-5 col-xs-12 text-right">
+          <div class="search-wrap">
+            <input type="text" id="searchInput" class="search-input" placeholder="Buscar modelo..." oninput="filterProducts()">
+            <span class="search-icon">&#128269;</span>
+          </div>
+        </div>
+      </div>
+      <div class="filter-chips" id="filterChips">
+        <button class="chip active" data-cat="todos" onclick="setCategory(this)">Todos</button>
+        <button class="chip" data-cat="sandalia" onclick="setCategory(this)">08 · Sandalia</button>
+        <button class="chip" data-cat="sueco" onclick="setCategory(this)">09 · Sueco</button>
+        <button class="chip" data-cat="mocasin" onclick="setCategory(this)">11 · Mocasín</button>
+        <button class="chip" data-cat="zapatilla" onclick="setCategory(this)">12 · Zapatilla</button>
+        <button class="chip" data-cat="botin" onclick="setCategory(this)">13 · Botín</button>
+        <button class="chip" data-cat="bota" onclick="setCategory(this)">14 · Bota</button>
+        <button class="chip" data-cat="tobillero" onclick="setCategory(this)">01 · Tobillero</button>
+      </div>
+      <div class="row sort-wrap">
+        <div class="col-xs-12">
+          <label for="sortSelect">Ordenar por:</label>
+          <select id="sortSelect" class="sort-select" onchange="sortProducts()">
+            <option value="default">Destacados</option>
+            <option value="precio-asc">Precio: Menor a Mayor</option>
+            <option value="precio-desc">Precio: Mayor a Menor</option>
+            <option value="nombre">Nombre A–Z</option>
+          </select>
+          <div class="view-toggle">
+            <button id="btnGrid" class="view-btn active" onclick="setView('grid')" title="Vista grilla">&#9632;&#9632;</button>
+            <button id="btnList" class="view-btn" onclick="setView('list')" title="Vista lista">&#9644;</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="catalog-section">
+    <div class="container">
+      <div class="product-count" id="productCount">Mostrando <span id="countNum">12</span> productos</div>
+      <div class="products-grid" id="productsGrid"></div>
+      <div class="hidden text-center" id="noResults">
+        <p>No se encontraron productos con ese criterio.</p>
+        <button class="btn btn-gold" onclick="resetFilters()">Ver todos</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+    <div class="modal-card" id="modalCard">
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+      <div class="modal-body">
+        <div class="modal-img-wrap">
+          <img id="modalImg" src="" alt="">
+          <div class="modal-thumbs" id="modalThumbs"></div>
+        </div>
+        <div class="modal-info">
+          <span class="modal-badge" id="modalBadge"></span>
+          <h2 class="modal-name" id="modalName"></h2>
+          <p class="modal-price" id="modalPrice"></p>
+          <p class="modal-desc" id="modalDesc"></p>
+          <div class="size-selector">
+            <p class="size-label">Selecciona tu talla:</p>
+            <div class="sizes" id="modalSizes"></div>
+          </div>
+          <div class="color-selector">
+            <p class="size-label">Color: <span id="colorName">–</span></p>
+            <div class="colors" id="modalColors"></div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-gold btn-full" onclick="addToCart()">Añadir al carrito</button>
+            <button class="btn btn-outline btn-fav" id="favBtn" onclick="toggleFav()">&#9825; Guardar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cart-sidebar" id="cartSidebar">
+    <div class="cart-header">
+      <h3>Tu Carrito</h3>
+      <button onclick="toggleCart()">&times;</button>
+    </div>
+    <div class="cart-items" id="cartItems">
+      <p class="cart-empty text-center">Tu carrito está vacío.</p>
+    </div>
+    <div class="cart-footer" id="cartFooter" style="display:none">
+      <div class="cart-total">Total: <strong id="cartTotal">S/ 0.00</strong></div>
+      <button class="btn btn-gold btn-full" onclick="checkout()">Proceder al pago</button>
+    </div>
+  </div>
+  <div class="cart-overlay" id="cartOverlay" onclick="toggleCart()"></div>
+
+  <div class="fab-container">
+    <button class="cart-fab" id="cartFab" onclick="toggleCart()" aria-label="Carrito">
+      &#128092;
+      <span class="cart-badge" id="cartBadge">0</span>
+    </button>
+    <a href="https://wa.me/+51985666816" class="fab whatsapp-fab" target="_blank" aria-label="WhatsApp">
+      &#x2709;
+    </a>
+  </div>
+
+  <section class="about-section" id="nosotros">
+    <div class="container">
+      <div class="row about-grid">
+        <div class="col-md-6 col-xs-12 about-text">
+          <p class="section-eyebrow">Nuestra Historia</p>
+          <h2 class="section-title">40 años vistiendo<br>a la mujer peruana</h2>
+          <p>Calzados Paredes nació en 1985 en el corazón de Trujillo, capital del calzado peruano. Desde el primer día, nuestra misión fue clara: crear calzado exclusivo para la mujer que valora la elegancia, el confort y la identidad propia.</p>
+          <p>Cuatro décadas después, somos un referente en moda femenina de calzado. Cada par es confeccionado a mano por maestras artesanas, usando cuero de primera selección y materiales que garantizan durabilidad, suavidad y estilo en cada paso.</p>
+          <div class="row about-stats">
+            <div class="col-xs-4 stat">
+              <span class="stat-num" data-target="40">0</span><span>Años</span>
+            </div>
+            <div class="col-xs-4 stat">
+              <span class="stat-num" data-target="8000">0</span><span>Clientas</span>
+            </div>
+            <div class="col-xs-4 stat">
+              <span class="stat-num" data-target="550">0</span><span>Modelos</span>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6 col-xs-12 about-img">
+          <div class="about-img-placeholder">
+            <img src="LOGOs.png" alt="Calzados Paredes">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="contact-section" id="contacto">
+    <div class="container">
+      <p class="section-eyebrow text-center">Escríbenos</p>
+      <h2 class="section-title text-center">¿Tienes alguna consulta?</h2>
+      <form class="contact-form" id="contactForm" onsubmit="submitForm(event)" novalidate>
+        <div class="row">
+          <div class="col-sm-6 col-xs-12 form-group">
+            <label for="contactName">Nombre completo *</label>
+            <input type="text" id="contactName" class="form-control" placeholder="Tu nombre" oninput="validateField(this)">
+            <span class="field-error" id="nameError"></span>
+          </div>
+          <div class="col-sm-6 col-xs-12 form-group">
+            <label for="contactEmail">Correo electrónico *</label>
+            <input type="email" id="contactEmail" class="form-control" placeholder="tu@correo.com" oninput="validateField(this)">
+            <span class="field-error" id="emailError"></span>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-xs-12 form-group">
+            <label for="contactPhone">Teléfono / WhatsApp</label>
+            <input type="tel" id="contactPhone" class="form-control" placeholder="+51 999 000 000" oninput="formatPhone(this)">
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-xs-12 form-group">
+            <label for="contactMsg">Mensaje *</label>
+            <textarea id="contactMsg" class="form-control" rows="5" placeholder="¿En qué podemos ayudarte?" oninput="validateField(this)"></textarea>
+            <span class="field-error" id="msgError"></span>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-xs-12">
+            <button type="submit" class="btn btn-gold">Enviar Mensaje</button>
+          </div>
+        </div>
+      </form>
+      <div class="form-success hidden text-center" id="formSuccess">
+        <div class="success-icon">&#10003;</div>
+        <h3>¡Mensaje enviado!</h3>
+        <p>Nos pondremos en contacto contigo a la brevedad.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="row footer-grid">
+        <div class="col-md-6 col-sm-12 footer-brand">
+          <img src="LOGO.png" alt="Calzados Paredes" class="footer-logo">
+          <p>Calzado Exclusivo para Dama · Trujillo, Perú · Desde 1985</p>
+        </div>
+        <div class="col-md-3 col-sm-6 footer-links">
+          <h4>Navegación</h4>
+          <ul>
+            <li><a href="#inicio">Inicio</a></li>
+            <li><a href="#modelos">Modelos</a></li>
+            <li><a href="#nosotros">Nosotros</a></li>
+            <li><a href="#contacto">Contacto</a></li>
+          </ul>
+        </div>
+        <div class="col-md-3 col-sm-6 footer-contact">
+          <h4>Contacto</h4>
+          <p>📍 C.C. APIAT Stand 206/135, Trujillo</p>
+          <p>📞 +51 985 666 816</p>
+          <p>📧 cpsacventas@gmail.com</p>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-xs-12 footer-bottom text-center">
+          <p>&copy; 2025 Calzados Paredes – Calzado Exclusivo para Dama. Todos los derechos reservados. Desde 1985.</p>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <div class="modal-overlay" id="checkoutOverlay" onclick="cerrarCheckout(event)">
+    <div class="modal-card" id="checkoutCard" style="max-width:480px">
+      <button class="modal-close" onclick="cerrarCheckout()">&times;</button>
+      <div style="padding:2rem">
+        <h2 style="margin:0 0 0.3rem;font-family:'Cormorant Garamond',serif;font-size:1.6rem">Datos del cliente</h2>
+        <p style="margin:0 0 1.5rem;color:#888;font-size:.9rem">Completa tu información para finalizar el pedido</p>
+
+        <div id="checkoutForm">
+          <div class="form-group">
+            <label for="ckNombre">Nombre completo *</label>
+            <input type="text" id="ckNombre" class="form-control" placeholder="Tu nombre completo">
+            <span class="field-error" id="ckNombreErr"></span>
+          </div>
+          <div class="form-group">
+            <label for="ckTelefono">Teléfono / WhatsApp *</label>
+            <input type="tel" id="ckTelefono" class="form-control" placeholder="+51 999 000 000">
+            <span class="field-error" id="ckTelefonoErr"></span>
+          </div>
+          <div class="form-group">
+            <label for="ckEmail">Correo electrónico</label>
+            <input type="email" id="ckEmail" class="form-control" placeholder="tu@correo.com">
+            <span class="field-error" id="ckEmailErr"></span>
+          </div>
+          <div class="form-group">
+            <label for="ckDireccion">Dirección de entrega *</label>
+            <input type="text" id="ckDireccion" class="form-control" placeholder="Av. / Jr. / Calle...">
+            <span class="field-error" id="ckDireccionErr"></span>
+          </div>
+          <div class="form-group">
+            <label for="ckNota">Nota adicional</label>
+            <textarea id="ckNota" class="form-control" rows="2" placeholder="Referencias, instrucciones especiales..."></textarea>
+          </div>
+          <button class="btn btn-gold btn-full" style="margin-top:.5rem" onclick="enviarPedido()">Confirmar pedido</button>
+        </div>
+
+        <div id="checkoutSuccess" class="form-success hidden text-center">
+          <div class="success-icon">&#10003;</div>
+          <h3>¡Pedido registrado!</h3>
+          <p id="checkoutSuccessMsg"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <button class="back-to-top" id="backToTop" onclick="scrollToTop()" title="Volver arriba">&#8679;</button>
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+  <script src="Calzado.js"></script>
+</body>
+</html>

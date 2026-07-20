@@ -1,0 +1,48 @@
+[
+  {
+    "id": 1,
+    "fecha": "2026-05-14T01:40:58.543Z",
+    "cliente": {
+      "nombre": "Martin lee",
+      "telefono": "939199671",
+      "email": "nathaly@gmail.com",
+      "direccion": "av.jiron vallejo",
+      "nota": "entrega en porteria"
+    },
+    "items": [
+      {
+        "id": 2,
+        "nombre": "Sandalia Sport Velcro",
+        "talla": 35,
+        "color": "Rosa",
+        "cantidad": 1,
+        "precio": 109.9,
+        "subtotal": 109.9
+      }
+    ],
+    "total": 109.9
+  },
+  {
+    "id": 2,
+    "fecha": "2026-05-14T17:05:28.731Z",
+    "cliente": {
+      "nombre": "Martin lee",
+      "telefono": "939199671",
+      "email": "nathaly@gmail.com",
+      "direccion": "av.jiron vallejo",
+      "nota": "a"
+    },
+    "items": [
+      {
+        "id": 3,
+        "nombre": "Sueco Sport Clásico",
+        "talla": 36,
+        "color": "Camel",
+        "cantidad": 1,
+        "precio": 135,
+        "subtotal": 135
+      }
+    ],
+    "total": 135
+  }
+]
