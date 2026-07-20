@@ -8,6 +8,8 @@ const config = {
   user: process.env.DB_USER,           // ej: tuusuario
   password: process.env.DB_PASSWORD,
   port: 1433,
+  connectionTimeout: 45000,   // Azure SQL serverless puede tardar en "despertar" si estaba pausado
+  requestTimeout: 30000,
   options: {
     encrypt: true,              // Azure SQL requiere conexión cifrada
     trustServerCertificate: false,
