@@ -245,6 +245,10 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (ruta === "/pedidos" && method === "GET") {
+        const claveAdmin = req.headers["x-admin-password"];
+        if (!process.env.ADMIN_PASSWORD || claveAdmin !== process.env.ADMIN_PASSWORD) {
+          return enviarJSON(res, 401, { error: "No autorizado" });
+        }
         return enviarJSON(res, 200, await leerPedidos());
       }
 
