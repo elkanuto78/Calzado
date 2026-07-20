@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin · Calzados Paredes</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --marron:        #3f2601;
+    --marron-claro:  #5a3a0a;
+    --dorado:        #c9a84c;
+    --dorado-claro:  #e0c070;
+    --crema:         #f0e6d4;
+    --crema-oscura:  #e2d5bf;
+    --blanco:        #fefcf8;
+    --texto:         #2a1a00;
+    --texto-suave:   #7a6040;
+    --sombra:        0 4px 24px rgba(63,38,1,0.13);
+    --radio:         10px;
+    --fuente-titulo: 'Cormorant Garamond', Georgia, serif;
+    --fuente-cuerpo: 'Jost', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background-color: var(--crema);
+    color: var(--texto);
+    font-family: var(--fuente-cuerpo);
+    min-height: 100vh;
+  }
+  h1, h2, h3 { font-family: var(--fuente-titulo); color: var(--marron); }
+
+  /* ---- Login ---- */
+  #login-screen {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .login-box {
+    background: var(--blanco);
+    padding: 2.5rem;
+    border-radius: var(--radio);
+    box-shadow: var(--sombra);
+    width: 100%;
+    max-width: 360px;
+    text-align: center;
+  }
+  .login-box h1 { font-size: 1.8rem; margin-bottom: 0.3rem; }
+  .login-box p { color: var(--texto-suave); font-size: 0.9rem; margin-bottom: 1.5rem; }
+  .login-box input {
+    width: 100%;
+    padding: 0.7rem 1rem;
+    border: 1px solid var(--crema-oscura);
+    border-radius: var(--radio);
+    margin-bottom: 1rem;
+    font-family: var(--fuente-cuerpo);
+    font-size: 1rem;
+  }
+  .login-box button, .btn-dorado {
+    width: 100%;
+    padding: 0.7rem 1rem;
+    background: var(--dorado);
+    color: var(--marron);
+    border: none;
+    border-radius: var(--radio);
+    font-family: var(--fuente-cuerpo);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+  .login-box button:hover, .btn-dorado:hover { background: var(--dorado-claro); }
+  #login-error {
+    color: #b02a2a;
+    font-size: 0.85rem;
+    margin-top: 0.8rem;
+    min-height: 1.2em;
+  }
+
+  /* ---- Dashboard ---- */
+  #dashboard { display: none; }
+  .admin-header {
+    background: var(--marron);
+    color: var(--crema);
+    padding: 1.2rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .admin-header h1 { color: var(--dorado-claro); font-size: 1.6rem; }
+  .admin-header button {
+    background: transparent;
+    border: 1px solid var(--dorado);
+    color: var(--dorado-claro);
+    padding: 0.4rem 1rem;
+    border-radius: var(--radio);
+    cursor: pointer;
+    font-family: var(--fuente-cuerpo);
+  }
+  .admin-header button:hover { background: rgba(255,255,255,0.08); }
+
+  main { padding: 2rem; max-width: 1200px; margin: 0 auto; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .stat-card {
+    background: var(--blanco);
+    border-radius: var(--radio);
+    box-shadow: var(--sombra);
+    padding: 1.3rem;
+  }
+  .stat-card .valor { font-family: var(--fuente-titulo); font-size: 2rem; color: var(--marron); }
+  .stat-card .etiqueta { font-size: 0.85rem; color: var(--texto-suave); text-transform: uppercase; letter-spacing: 0.05em; }
+
+  .toolbar {
+    display: flex;
+    gap: 0.8rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .toolbar input {
+    padding: 0.5rem 0.9rem;
+    border: 1px solid var(--crema-oscura);
+    border-radius: var(--radio);
+    font-family: var(--fuente-cuerpo);
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .pedidos-tabla {
+    background: var(--blanco);
+    border-radius: var(--radio);
+    box-shadow: var(--sombra);
+    overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  th, td {
+    text-align: left;
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid var(--crema-oscura);
+    font-size: 0.92rem;
+    vertical-align: top;
+  }
+  th {
+    background: var(--crema-oscura);
+    color: var(--marron);
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(201,168,76,0.06); }
+  .total-cell { font-weight: 600; color: var(--marron-claro); white-space: nowrap; }
+  .items-list { font-size: 0.85rem; color: var(--texto-suave); }
+  .items-list div { margin-bottom: 0.2rem; }
+  .cliente-nombre { font-weight: 500; }
+  .cliente-detalle { font-size: 0.82rem; color: var(--texto-suave); }
+
+  #estado-carga, #estado-vacio {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--texto-suave);
+  }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-box">
+    <h1>Panel Admin</h1>
+    <p>Calzados Paredes — Historial de ventas</p>
+    <input type="password" id="password-input" placeholder="Contraseña" autocomplete="current-password">
+    <button id="btn-login">Ingresar</button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<div id="dashboard">
+  <header class="admin-header">
+    <h1>Calzados Paredes · Admin</h1>
+    <button id="btn-logout">Cerrar sesión</button>
+  </header>
+
+  <main>
+    <section class="stats">
+      <div class="stat-card">
+        <div class="valor" id="stat-total-pedidos">–</div>
+        <div class="etiqueta">Pedidos totales</div>
+      </div>
+      <div class="stat-card">
+        <div class="valor" id="stat-total-ventas">–</div>
+        <div class="etiqueta">Ventas totales</div>
+      </div>
+      <div class="stat-card">
+        <div class="valor" id="stat-ticket-promedio">–</div>
+        <div class="etiqueta">Ticket promedio</div>
+      </div>
+    </section>
+
+    <div class="toolbar">
+      <input type="text" id="buscar-input" placeholder="Buscar por nombre, email o teléfono...">
+      <button class="btn-dorado" id="btn-refrescar" style="width:auto; padding:0.6rem 1.2rem;">Actualizar</button>
+    </div>
+
+    <div class="pedidos-tabla">
+      <div id="estado-carga">Cargando pedidos...</div>
+      <div id="estado-vacio" style="display:none;">No hay pedidos que coincidan con la búsqueda.</div>
+      <table id="tabla-pedidos" style="display:none;">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Fecha</th>
+            <th>Cliente</th>
+            <th>Productos</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-pedidos"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="admin.js"></script>
+</body>
+</html>
