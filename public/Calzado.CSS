@@ -1273,20 +1273,31 @@ img { max-width: 100%; display: block; }
   .nav-links li:last-child a { border-bottom: none; }
 
   
-  .hero-section { padding-top: 64px; min-height: 100svh; }
-  .hero-bg {
-    background-position: 65% center;
-    background-size: cover;
+  .hero-section {
+    padding-top: 64px;
+    min-height: auto;
+    display: block;
   }
+  .hero-bg {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background-size: cover;
+    background-position: center;
+  }
+  .hero-content { display: none; }
   .hero-btns {
-    bottom: 24px;
+    position: static;
+    transform: none;
+    bottom: auto;
+    left: auto;
+    margin-top: 20px;
+    padding: 0 16px;
     gap: 10px;
-    flex-direction: row;
     flex-wrap: wrap;
     justify-content: center;
-    padding: 0 16px;
     width: 100%;
-    transform: translateX(-50%);
   }
   .hero-btns .btn { padding: 12px 20px; font-size: 13px; }
 
