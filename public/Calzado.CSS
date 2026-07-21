@@ -1368,7 +1368,7 @@ img { max-width: 100%; display: block; }
   
   .fab-container { bottom: 16px; right: 14px; gap: 8px; }
   .fab, .cart-fab { width: 46px; height: 46px; font-size: 18px; }
-  .back-to-top { bottom: 16px; right: 68px; }
+  .back-to-top { bottom: 126px; right: 15px; width: 44px; height: 44px; }
 }
 
 @media (max-width: 480px) {
