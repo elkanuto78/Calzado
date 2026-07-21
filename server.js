@@ -128,16 +128,32 @@ async function leerPedidos() {
   return recordset.map(mapearPedido);
 }
 
+// Devuelve la fecha/hora actual como texto en horario de Lima (UTC-5, sin
+// horario de verano), independiente de en qué zona horaria esté el servidor
+// donde corre Node (Render corre en UTC).
+function obtenerFechaLima() {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Lima",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const obj = {};
+  partes.forEach(({ type, value }) => (obj[type] = value));
+  return `${obj.year}-${obj.month}-${obj.day}T${obj.hour}:${obj.minute}:${obj.second}`;
+}
+
 async function crearPedido({ cliente, items, total }) {
   const pool = await getPool();
   const { recordset } = await pool
     .request()
+    .input("fecha", sql.VarChar(30), obtenerFechaLima())
     .input("cliente", sql.NVarChar(sql.MAX), JSON.stringify(cliente))
     .input("items", sql.NVarChar(sql.MAX), JSON.stringify(items))
     .input("total", sql.Decimal(10, 2), Number(total))
-    .query(`INSERT INTO pedidos (cliente, items, total)
+    .query(`INSERT INTO pedidos (fecha, cliente, items, total)
             OUTPUT INSERTED.*
-            VALUES (@cliente, @items, @total)`);
+            VALUES (CAST(@fecha AS DATETIME2), @cliente, @items, @total)`);
   return mapearPedido(recordset[0]);
 }
 
