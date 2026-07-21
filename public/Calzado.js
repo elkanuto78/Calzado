@@ -359,6 +359,13 @@ function actualizarCarritoUI() {
 
 function checkout() {
   if (estado.carrito.length === 0) return;
+
+  // Cierra el panel del carrito para dejar espacio al formulario de datos
+  const sidebar = document.getElementById("cartSidebar");
+  const cartOverlay = document.getElementById("cartOverlay");
+  if (sidebar) sidebar.classList.remove("open");
+  if (cartOverlay) cartOverlay.classList.remove("open");
+
   document.getElementById("checkoutForm").classList.remove("hidden");
   document.getElementById("checkoutSuccess").classList.add("hidden");
   ["ckNombre", "ckTelefono", "ckEmail", "ckDireccion", "ckNota"].forEach((id) => {
