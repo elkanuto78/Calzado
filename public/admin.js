@@ -28,12 +28,17 @@
   }
 
   function formatearFecha(iso) {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return iso;
-    return d.toLocaleString("es-PE", {
-      day: "2-digit", month: "short", year: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    });
+    // El valor ya viene calculado en hora de Lima desde el servidor.
+    // Se muestran los componentes tal cual, sin aplicar ninguna conversión
+    // de huso horario adicional (evita desfases si el navegador está en otra zona).
+    const match = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+    if (!match) return iso;
+    const [, anio, mes, dia, hora, min] = match;
+    const meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+    const horaNum = parseInt(hora, 10);
+    const ampm = horaNum >= 12 ? "p. m." : "a. m.";
+    const hora12 = ((horaNum + 11) % 12) + 1;
+    return `${dia} ${meses[parseInt(mes, 10) - 1]} ${anio}, ${hora12}:${min} ${ampm}`;
   }
 
   function getClave() {
