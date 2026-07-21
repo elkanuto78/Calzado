@@ -1287,19 +1287,7 @@ img { max-width: 100%; display: block; }
     background-position: center;
   }
   .hero-content { display: none; }
-  .hero-btns {
-    position: static;
-    transform: none;
-    bottom: auto;
-    left: auto;
-    margin-top: 20px;
-    padding: 0 16px;
-    gap: 10px;
-    flex-wrap: wrap;
-    justify-content: center;
-    width: 100%;
-  }
-  .hero-btns .btn { padding: 12px 20px; font-size: 13px; }
+  .hero-btns { display: none; }
 
   
   .filters-section {
@@ -1397,12 +1385,6 @@ img { max-width: 100%; display: block; }
 
   
   .hero-section { padding-top: 58px; }
-  .hero-btns {
-    flex-direction: column;
-    bottom: 20px;
-    gap: 10px;
-  }
-  .hero-btns .btn { width: 200px; text-align: center; padding: 13px 12px; }
 
   
   .filters-section { padding: 16px 0 12px; }
