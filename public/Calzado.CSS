@@ -857,6 +857,15 @@ img { max-width: 100%; display: block; }
   flex-shrink: 0;
 }
 
+.cart-item-img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--crema);
+  flex-shrink: 0;
+}
+
 .cart-item-info { flex: 1; }
 .cart-item-name { font-size: 14px; font-weight: 500; color: var(--marron); }
 .cart-item-meta { font-size: 12px; color: var(--texto-suave); }
