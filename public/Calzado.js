@@ -151,7 +151,7 @@ function abrirModal(id) {
   estado.colorSeleccionado = null;
   estado.imgIndexActual = 0;
 
-  document.getElementById("modalBadge").textContent = `Cód. ${p.codigo} · ${p.tipo.toUpperCase()} · Sport Dama`;
+  document.getElementById("modalBadge").textContent = `${p.tipo.toUpperCase()} · Sport Dama`;
   document.getElementById("modalName").textContent = p.nombre;
   document.getElementById("modalPrice").textContent = "S/ " + p.precio.toFixed(2);
   document.getElementById("modalDesc").textContent = p.descripcion;
@@ -183,6 +183,7 @@ function abrirModal(id) {
   if (colores.length > 0) {
     estado.colorSeleccionado = colores[0].nombre;
     document.getElementById("colorName").textContent = colores[0].nombre;
+    if (colores[0].imagen) modalImg.src = colores[0].imagen;
   }
 
   const esFav = estado.favoritos.includes(p.id);
@@ -206,8 +207,10 @@ document.addEventListener("keydown", (e) => {
 });
 
 // Zoom siguiendo el cursor sobre la imagen del modal de detalle (solo
-// en dispositivos con mouse; en celular/táctil no tiene efecto).
+// en dispositivos con mouse real; en celular/táctil no se activa nada).
 (function initZoomImagenModal() {
+  if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+
   const wrap = document.querySelector(".modal-img-wrap");
   const img = document.getElementById("modalImg");
   if (!wrap || !img) return;
@@ -241,6 +244,13 @@ function seleccionarColor(dot, nombre) {
   dot.style.borderColor = "#3f2601";
   estado.colorSeleccionado = nombre;
   document.getElementById("colorName").textContent = nombre;
+
+  const p = estado.productoActual;
+  if (!p) return;
+  const colores = Array.isArray(p.colores) ? p.colores : [p.colores];
+  const colorElegido = colores.find((c) => c.nombre === nombre);
+  const modalImg = document.getElementById("modalImg");
+  modalImg.src = (colorElegido && colorElegido.imagen) ? colorElegido.imagen : p.imagen;
 }
 
 function toggleFav() {
