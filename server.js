@@ -3,6 +3,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { sql, getPool } = require("./db");
+const { enviarConsultaContacto } = require("./mailer");
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, "public");
@@ -299,6 +300,26 @@ const server = http.createServer(async (req, res) => {
         }
         const nuevoPedido = await crearPedido(body);
         return enviarJSON(res, 201, nuevoPedido);
+      }
+
+      if (ruta === "/contacto" && method === "POST") {
+        let body;
+        try {
+          body = await leerBody(req);
+        } catch (e) {
+          return enviarJSON(res, 400, { error: e.message });
+        }
+        const { nombre, email, telefono, mensaje } = body;
+        if (!nombre || !email || !mensaje) {
+          return enviarJSON(res, 400, { error: "Campos requeridos: nombre, email, mensaje" });
+        }
+        try {
+          await enviarConsultaContacto({ nombre, email, telefono, mensaje });
+        } catch (e) {
+          console.error("No se pudo enviar el correo de contacto:", e.message);
+          return enviarJSON(res, 502, { error: "No se pudo enviar tu mensaje. Intenta de nuevo más tarde." });
+        }
+        return enviarJSON(res, 200, { mensaje: "Consulta enviada correctamente" });
       }
 
       return enviarJSON(res, 404, { error: "Ruta de API no encontrada" });
