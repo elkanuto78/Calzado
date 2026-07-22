@@ -38,7 +38,7 @@ async function migrar() {
             .input("tipo", sql.NVarChar(50), p.tipo)
             .input("precio", sql.Decimal(10, 2), p.precio)
             .input("descripcion", sql.NVarChar(sql.MAX), p.descripcion ?? "")
-            .input("imagen", sql.NVarChar(300), p.imagen ?? "")
+            .input("imagen", sql.NVarChar(sql.MAX), p.imagen ?? "")
             .input("colores", sql.NVarChar(sql.MAX), JSON.stringify(p.colores ?? []))
             .input("tallas", sql.NVarChar(sql.MAX), JSON.stringify(p.tallas ?? []))
             .input("tag", sql.NVarChar(50), p.tag ?? null)
