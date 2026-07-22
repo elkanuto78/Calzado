@@ -1,664 +1,302 @@
-let PRODUCTOS = [];
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="format-detection" content="telephone=no">
+    <title>Calzados Paredes</title>
+    <link rel="icon" type="image/png" href="LOGOs.png">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="Calzado.CSS">
+</head>
+<body>
 
-let estado = {
-  filtroCategoria: "todos",
-  textoBusqueda: "",
-  ordenamiento: "default",
-  vistaActual: "grid",
-  productoActual: null,
-  tallaSeleccionada: null,
-  colorSeleccionado: null,
-  imgIndexActual: 0,
-  carrito: [],
-  favoritos: [],
-};
+  <header class="header" id="mainHeader">
+    <div class="logo" onclick="scrollToTop()">
+      <img src="LOGOs.png" alt="Calzados Paredes">
+    </div>
+    <nav class="header-nav">
+      <ul class="nav-links" id="navLinks">
+        <li><a href="#inicio" class="nav-link active" data-section="inicio">Inicio</a></li>
+        <li><a href="#modelos" class="nav-link" data-section="modelos">Modelos</a></li>
+        <li><a href="#nosotros" class="nav-link" data-section="nosotros">Nosotros</a></li>
+        <li><a href="#contacto" class="nav-link" data-section="contacto">Contacto</a></li>
+      </ul>
+      <button class="menu-toggle" id="menuToggle" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </nav>
+  </header>
 
-document.addEventListener("DOMContentLoaded", () => {
-  fetch("/api/productos")
-    .then((r) => r.json())
-    .then((data) => {
-      PRODUCTOS = data.productos;
-      renderProductos();
-    })
-    .catch(() => mostrarToast("Error al cargar los productos"));
+  <section class="hero-section" id="inicio">
+    <div class="hero-bg"></div>
+    <div class="hero-content"></div>
+    <div class="hero-btns">
+      <a href="#modelos" class="btn btn-gold">Ver Catálogo</a>
+      <a href="#nosotros" class="btn btn-outline">Nuestra Historia</a>
+    </div>
+  </section>
 
-  iniciarScrollEvents();
-  iniciarAnimacionEstadisticas();
-  iniciarNavActiva();
-});
-
-function filterProducts() {
-  const input = document.getElementById("searchInput");
-  estado.filtroCategoria = "todos";
-  document.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
-  document.querySelector('.chip[data-cat="todos"]').classList.add("active");
-  estado.textoBusqueda = input.value.trim().toLowerCase();
-  renderProductos();
-}
-
-function setCategory(chipEl) {
-  document.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
-  chipEl.classList.add("active");
-  estado.filtroCategoria = chipEl.dataset.cat;
-  estado.textoBusqueda = "";
-  document.getElementById("searchInput").value = "";
-  renderProductos();
-}
-
-function sortProducts() {
-  estado.ordenamiento = document.getElementById("sortSelect").value;
-  renderProductos();
-}
-
-function setView(vista) {
-  estado.vistaActual = vista;
-  const grid = document.getElementById("productsGrid");
-  if (vista === "list") {
-    grid.classList.add("list-view");
-    document.getElementById("btnList").classList.add("active");
-    document.getElementById("btnGrid").classList.remove("active");
-  } else {
-    grid.classList.remove("list-view");
-    document.getElementById("btnGrid").classList.add("active");
-    document.getElementById("btnList").classList.remove("active");
-  }
-}
-
-function renderProductos() {
-  let lista = [...PRODUCTOS];
-
-  if (estado.filtroCategoria !== "todos") {
-    lista = lista.filter((p) => p.tipo === estado.filtroCategoria);
-  }
-
-  if (estado.textoBusqueda) {
-    lista = lista.filter(
-      (p) =>
-        p.nombre.toLowerCase().includes(estado.textoBusqueda) ||
-        p.descripcion.toLowerCase().includes(estado.textoBusqueda)
-    );
-  }
-
-  switch (estado.ordenamiento) {
-    case "precio-asc":
-      lista.sort((a, b) => a.precio - b.precio);
-      break;
-    case "precio-desc":
-      lista.sort((a, b) => b.precio - a.precio);
-      break;
-    case "nombre":
-      lista.sort((a, b) => a.nombre.localeCompare(b.nombre));
-      break;
-  }
-
-  const grid = document.getElementById("productsGrid");
-  const noResults = document.getElementById("noResults");
-  const countNum = document.getElementById("countNum");
-
-  if (lista.length === 0) {
-    grid.innerHTML = "";
-    noResults.classList.remove("hidden");
-    countNum.textContent = "0";
-  } else {
-    noResults.classList.add("hidden");
-    countNum.textContent = lista.length;
-    grid.innerHTML = lista.map((p, i) => crearTarjeta(p, i)).join("");
-    if (estado.vistaActual === "list") grid.classList.add("list-view");
-  }
-}
-
-function crearTarjeta(producto, index) {
-  const esFavorito = estado.favoritos.includes(producto.id);
-  const tagHtml = producto.tag
-    ? `<span class="product-tag ${producto.tag === "oferta" ? "oferta" : ""}">${producto.tag}</span>`
-    : "";
-
-  return `
-    <div class="product-card" style="animation-delay: ${index * 0.06}s"
-         onclick="abrirModal(${producto.id})">
-      <div class="product-img-wrapper">
-        ${tagHtml}
-        <img src="${producto.imagen}" alt="${producto.nombre}" class="product-img" />
-        <div class="product-img-overlay">
-          <button class="overlay-btn" onclick="event.stopPropagation(); abrirModal(${producto.id})">
-            Ver detalle
-          </button>
+  <div id="modelos" style="position:relative;top:0;height:0;pointer-events:none;"></div>
+  <section class="filters-section">
+    <div class="container">
+      <div class="row filters-header">
+        <div class="col-sm-7 col-xs-12">
+          <h2 class="section-title">Nuestros Modelos</h2>
+        </div>
+        <div class="col-sm-5 col-xs-12 text-right">
+          <div class="search-wrap">
+            <input type="text" id="searchInput" class="search-input" placeholder="Buscar modelo..." oninput="filterProducts()">
+          </div>
         </div>
       </div>
-      <div class="product-body">
-        <span class="product-badge">${producto.tipo}</span>
-        <h3 class="product-name">${producto.nombre}</h3>
-        <p class="product-desc">${producto.descripcion.substring(0, 68)}…</p>
+      <div class="filter-chips" id="filterChips">
+        <button class="chip active" data-cat="todos" onclick="setCategory(this)">Todos</button>
+        <button class="chip" data-cat="sandalia" onclick="setCategory(this)">Sandalia</button>
+        <button class="chip" data-cat="sueco" onclick="setCategory(this)">Sueco</button>
+        <button class="chip" data-cat="mocasin" onclick="setCategory(this)">Mocasín</button>
+        <button class="chip" data-cat="zapatilla" onclick="setCategory(this)">Zapatilla</button>
+        <button class="chip" data-cat="botin" onclick="setCategory(this)">Botín</button>
+        <button class="chip" data-cat="bota" onclick="setCategory(this)">Bota</button>
+        <button class="chip" data-cat="tobillero" onclick="setCategory(this)">Tobillero</button>
       </div>
-      <div class="product-footer">
-        <span class="product-price">S/ ${producto.precio.toFixed(2)}</span>
-        <button
-          class="product-fav ${esFavorito ? "active" : ""}"
-          onclick="event.stopPropagation(); toggleFavDesdeCard(${producto.id}, this)"
-          title="${esFavorito ? "Quitar de favoritos" : "Añadir a favoritos"}"
-        >${esFavorito ? "♥" : "♡"}</button>
-      </div>
-    </div>
-  `;
-}
-
-function abrirModal(id) {
-  const p = PRODUCTOS.find((x) => x.id === id);
-  if (!p) return;
-
-  estado.productoActual = p;
-  estado.tallaSeleccionada = null;
-  estado.colorSeleccionado = null;
-  estado.imgIndexActual = 0;
-
-  document.getElementById("modalBadge").textContent = `${p.tipo.toUpperCase()} · Sport Dama`;
-  document.getElementById("modalName").textContent = p.nombre;
-  document.getElementById("modalPrice").textContent = "S/ " + p.precio.toFixed(2);
-  document.getElementById("modalDesc").textContent = p.descripcion;
-  document.getElementById("colorName").textContent = "–";
-
-  const modalImg = document.getElementById("modalImg");
-  modalImg.src = p.imagen;
-  modalImg.style.display = "block";
-
-  const sizesContainer = document.getElementById("modalSizes");
-  sizesContainer.innerHTML = p.tallas
-    .map((t) => `<button class="size-btn" onclick="seleccionarTalla(this, ${t})">${t}</button>`)
-    .join("");
-
-  const colores = Array.isArray(p.colores) ? p.colores : [p.colores];
-  const colorsContainer = document.getElementById("modalColors");
-  colorsContainer.innerHTML = colores
-    .map(
-      (c, i) => `
-    <div class="color-dot ${i === 0 ? "active" : ""}"
-         style="background-color: ${c.hex}; border-color: ${i === 0 ? "#3f2601" : "transparent"}"
-         onclick="seleccionarColor(this, '${c.nombre}')"
-         title="${c.nombre}">
-    </div>
-  `
-    )
-    .join("");
-
-  if (colores.length > 0) {
-    estado.colorSeleccionado = colores[0].nombre;
-    document.getElementById("colorName").textContent = colores[0].nombre;
-    if (colores[0].imagen) modalImg.src = colores[0].imagen;
-  }
-
-  const esFav = estado.favoritos.includes(p.id);
-  const favBtn = document.getElementById("favBtn");
-  favBtn.innerHTML = esFav ? "♥ Guardado" : "♡ Guardar";
-  favBtn.style.color = esFav ? "#c0392b" : "";
-
-  document.getElementById("modalOverlay").classList.add("open");
-  document.body.style.overflow = "hidden";
-}
-
-function closeModal(event) {
-  if (event && event.target !== document.getElementById("modalOverlay")) return;
-  document.getElementById("modalOverlay").classList.remove("open");
-  document.body.style.overflow = "";
-  estado.productoActual = null;
-}
-
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeModal();
-});
-
-// Zoom siguiendo el cursor sobre la imagen del modal de detalle (solo
-// en dispositivos con mouse real; en celular/táctil no se activa nada).
-(function initZoomImagenModal() {
-  if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
-
-  const wrap = document.querySelector(".modal-img-wrap");
-  const img = document.getElementById("modalImg");
-  if (!wrap || !img) return;
-
-  wrap.addEventListener("mousemove", (e) => {
-    const rect = wrap.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-    img.style.transformOrigin = `${x}% ${y}%`;
-    wrap.classList.add("zoom-activo");
-  });
-
-  wrap.addEventListener("mouseleave", () => {
-    wrap.classList.remove("zoom-activo");
-    img.style.transformOrigin = "center center";
-  });
-})();
-
-function seleccionarTalla(btn, talla) {
-  document.querySelectorAll(".size-btn").forEach((b) => b.classList.remove("active"));
-  btn.classList.add("active");
-  estado.tallaSeleccionada = talla;
-}
-
-function seleccionarColor(dot, nombre) {
-  document.querySelectorAll(".color-dot").forEach((d) => {
-    d.style.borderColor = "transparent";
-    d.classList.remove("active");
-  });
-  dot.classList.add("active");
-  dot.style.borderColor = "#3f2601";
-  estado.colorSeleccionado = nombre;
-  document.getElementById("colorName").textContent = nombre;
-
-  const p = estado.productoActual;
-  if (!p) return;
-  const colores = Array.isArray(p.colores) ? p.colores : [p.colores];
-  const colorElegido = colores.find((c) => c.nombre === nombre);
-  const modalImg = document.getElementById("modalImg");
-  modalImg.src = (colorElegido && colorElegido.imagen) ? colorElegido.imagen : p.imagen;
-}
-
-function toggleFav() {
-  if (!estado.productoActual) return;
-  const id = estado.productoActual.id;
-  const idx = estado.favoritos.indexOf(id);
-  const favBtn = document.getElementById("favBtn");
-  if (idx === -1) {
-    estado.favoritos.push(id);
-    favBtn.innerHTML = "♥ Guardado";
-    favBtn.style.color = "#c0392b";
-    mostrarToast("✓ Guardado en favoritos");
-  } else {
-    estado.favoritos.splice(idx, 1);
-    favBtn.innerHTML = "♡ Guardar";
-    favBtn.style.color = "";
-    mostrarToast("Eliminado de favoritos");
-  }
-  renderProductos();
-}
-
-function toggleFavDesdeCard(id, btn) {
-  const idx = estado.favoritos.indexOf(id);
-  if (idx === -1) {
-    estado.favoritos.push(id);
-    btn.innerHTML = "♥";
-    btn.classList.add("active");
-    mostrarToast("✓ Guardado en favoritos");
-  } else {
-    estado.favoritos.splice(idx, 1);
-    btn.innerHTML = "♡";
-    btn.classList.remove("active");
-    mostrarToast("Eliminado de favoritos");
-  }
-}
-
-function addToCart() {
-  if (!estado.productoActual) return;
-  if (!estado.tallaSeleccionada) {
-    mostrarToast("⚠ Por favor elige una talla");
-    return;
-  }
-  const item = {
-    id: estado.productoActual.id,
-    nombre: estado.productoActual.nombre,
-    precio: estado.productoActual.precio,
-    imagen: estado.productoActual.imagen,
-    talla: estado.tallaSeleccionada,
-    color: estado.colorSeleccionado || "—",
-    cantidad: 1,
-  };
-  const existente = estado.carrito.find(
-    (c) => c.id === item.id && c.talla === item.talla && c.color === item.color
-  );
-  if (existente) {
-    existente.cantidad += 1;
-  } else {
-    estado.carrito.push(item);
-  }
-  actualizarCarritoUI();
-  closeModal();
-  mostrarToast(`✓ "${item.nombre}" añadido al carrito`);
-}
-
-function toggleCart() {
-  const sidebar = document.getElementById("cartSidebar");
-  const overlay = document.getElementById("cartOverlay");
-  sidebar.classList.toggle("open");
-  overlay.classList.toggle("open");
-  if (sidebar.classList.contains("open")) {
-    document.body.style.overflow = "hidden";
-  } else {
-    document.body.style.overflow = "";
-  }
-}
-
-function eliminarDelCarrito(index) {
-  estado.carrito.splice(index, 1);
-  actualizarCarritoUI();
-  mostrarToast("Producto eliminado del carrito");
-}
-
-function actualizarCarritoUI() {
-  const cartItemsEl = document.getElementById("cartItems");
-  const cartFooter = document.getElementById("cartFooter");
-  const badge = document.getElementById("cartBadge");
-  const total = estado.carrito.reduce((sum, item) => sum + item.precio * item.cantidad, 0);
-  const totalItems = estado.carrito.reduce((sum, item) => sum + item.cantidad, 0);
-
-  badge.textContent = totalItems;
-  badge.style.display = totalItems > 0 ? "flex" : "none";
-
-  if (estado.carrito.length === 0) {
-    cartItemsEl.innerHTML = '<p class="cart-empty">Tu carrito está vacío.</p>';
-    cartFooter.style.display = "none";
-  } else {
-    cartItemsEl.innerHTML = estado.carrito
-      .map(
-        (item, i) => `
-      <div class="cart-item">
-        <img src="${item.imagen}" alt="${item.nombre}" class="cart-item-img" />
-        <div class="cart-item-info">
-          <div class="cart-item-name">${item.nombre}</div>
-          <div class="cart-item-meta">Talla ${item.talla} · ${item.color} · x${item.cantidad}</div>
-          <div class="cart-item-price">S/ ${(item.precio * item.cantidad).toFixed(2)}</div>
+      <div class="row sort-wrap">
+        <div class="col-xs-12">
+          <label for="sortSelect">Ordenar por:</label>
+          <select id="sortSelect" class="sort-select" onchange="sortProducts()">
+            <option value="default">Destacados</option>
+            <option value="precio-asc">Precio: Menor a Mayor</option>
+            <option value="precio-desc">Precio: Mayor a Menor</option>
+            <option value="nombre">Nombre A–Z</option>
+          </select>
+          <div class="view-toggle">
+            <button id="btnGrid" class="view-btn active" onclick="setView('grid')" title="Vista grilla">&#9632;&#9632;</button>
+            <button id="btnList" class="view-btn" onclick="setView('list')" title="Vista lista">&#9644;</button>
+          </div>
         </div>
-        <button class="cart-item-remove" onclick="eliminarDelCarrito(${i})" title="Eliminar">✕</button>
       </div>
-    `
-      )
-      .join("");
-    document.getElementById("cartTotal").textContent = `S/ ${total.toFixed(2)}`;
-    cartFooter.style.display = "block";
-  }
-}
+    </div>
+  </section>
 
-function checkout() {
-  if (estado.carrito.length === 0) return;
+  <section class="catalog-section">
+    <div class="container">
+      <div class="product-count" id="productCount">Mostrando <span id="countNum">12</span> productos</div>
+      <div class="products-grid" id="productsGrid"></div>
+      <div class="hidden text-center" id="noResults">
+        <p>No se encontraron productos con ese criterio.</p>
+        <button class="btn btn-gold" onclick="resetFilters()">Ver todos</button>
+      </div>
+    </div>
+  </section>
 
-  // Cierra el panel del carrito para dejar espacio al formulario de datos
-  const sidebar = document.getElementById("cartSidebar");
-  const cartOverlay = document.getElementById("cartOverlay");
-  if (sidebar) sidebar.classList.remove("open");
-  if (cartOverlay) cartOverlay.classList.remove("open");
+  <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+    <div class="modal-card" id="modalCard">
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+      <div class="modal-body">
+        <div class="modal-img-wrap">
+          <img id="modalImg" src="" alt="">
+        </div>
+        <div class="modal-info">
+          <span class="modal-badge" id="modalBadge"></span>
+          <h2 class="modal-name" id="modalName"></h2>
+          <p class="modal-price" id="modalPrice"></p>
+          <p class="modal-desc" id="modalDesc"></p>
+          <div class="size-selector">
+            <p class="size-label">Selecciona tu talla:</p>
+            <div class="sizes" id="modalSizes"></div>
+          </div>
+          <div class="color-selector">
+            <p class="size-label">Color: <span id="colorName">–</span></p>
+            <div class="colors" id="modalColors"></div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-gold btn-full" onclick="addToCart()">Añadir al carrito</button>
+            <button class="btn btn-outline btn-fav" id="favBtn" onclick="toggleFav()">&#9825; Guardar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-  document.getElementById("checkoutForm").classList.remove("hidden");
-  document.getElementById("checkoutSuccess").classList.add("hidden");
-  ["ckNombre", "ckTelefono", "ckEmail", "ckDireccion", "ckNota"].forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) el.value = "";
-  });
-  ["ckNombreErr", "ckTelefonoErr", "ckEmailErr", "ckDireccionErr"].forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = "";
-  });
-  document.getElementById("checkoutOverlay").classList.add("open");
-  document.body.style.overflow = "hidden";
-}
+  <div class="cart-sidebar" id="cartSidebar">
+    <div class="cart-header">
+      <h3>Tu Carrito</h3>
+      <button onclick="toggleCart()">&times;</button>
+    </div>
+    <div class="cart-items" id="cartItems">
+      <p class="cart-empty text-center">Tu carrito está vacío.</p>
+    </div>
+    <div class="cart-footer" id="cartFooter" style="display:none">
+      <div class="cart-total">Total: <strong id="cartTotal">S/ 0.00</strong></div>
+      <button class="btn btn-gold btn-full" onclick="checkout()">Proceder al pago</button>
+    </div>
+  </div>
+  <div class="cart-overlay" id="cartOverlay" onclick="toggleCart()"></div>
 
-function cerrarCheckout(event) {
-  if (event && event.target !== document.getElementById("checkoutOverlay")) return;
-  document.getElementById("checkoutOverlay").classList.remove("open");
-  document.body.style.overflow = "";
-}
+  <div class="fab-container">
+    <button class="cart-fab" id="cartFab" onclick="toggleCart()" aria-label="Carrito">
+      &#128092;
+      <span class="cart-badge" id="cartBadge">0</span>
+    </button>
+    <a href="https://wa.me/+51985666816" class="fab whatsapp-fab" target="_blank" aria-label="WhatsApp">
+      &#x2709;
+    </a>
+  </div>
 
-function enviarPedido() {
-  const nombre    = document.getElementById("ckNombre");
-  const telefono  = document.getElementById("ckTelefono");
-  const email     = document.getElementById("ckEmail");
-  const direccion = document.getElementById("ckDireccion");
-  const nota      = document.getElementById("ckNota");
+  <section class="about-section" id="nosotros">
+    <div class="container">
+      <div class="row about-grid">
+        <div class="col-md-6 col-xs-12 about-text">
+          <p class="section-eyebrow">Nuestra Historia</p>
+          <h2 class="section-title">40 años vistiendo<br>a la mujer peruana</h2>
+          <p>Calzados Paredes nació en 1985 en el corazón de Trujillo, capital del calzado peruano. Desde el primer día, nuestra misión fue clara: crear calzado exclusivo para la mujer que valora la elegancia, el confort y la identidad propia.</p>
+          <p>Cuatro décadas después, somos un referente en moda femenina de calzado. Cada par es confeccionado con dedicación artesanal, utilizando cuero 100% nacional de primera selección y materiales que garantizan durabilidad, suavidad y estilo en cada paso.</p>
+          <div class="row about-stats">
+            <div class="col-xs-4 stat">
+              <span class="stat-num" data-target="40">0</span><span>Años</span>
+            </div>
+            <div class="col-xs-4 stat">
+              <span class="stat-num" data-target="8000">0</span><span>Clientas</span>
+            </div>
+            <div class="col-xs-4 stat">
+              <span class="stat-num" data-target="550">0</span><span>Modelos</span>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6 col-xs-12 about-img">
+          <div class="about-img-placeholder">
+            <img src="LOGO.png" alt="Calzados Paredes">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-  let valido = true;
+  <section class="contact-section" id="contacto">
+    <div class="container">
+      <p class="section-eyebrow text-center">Escríbenos</p>
+      <h2 class="section-title text-center">¿Tienes alguna consulta?</h2>
+      <form class="contact-form" id="contactForm" onsubmit="submitForm(event)" novalidate>
+        <div class="row">
+          <div class="col-sm-6 col-xs-12 form-group">
+            <label for="contactName">Nombre completo *</label>
+            <input type="text" id="contactName" class="form-control" placeholder="Tu nombre" oninput="validateField(this)">
+            <span class="field-error" id="nameError"></span>
+          </div>
+          <div class="col-sm-6 col-xs-12 form-group">
+            <label for="contactEmail">Correo electrónico *</label>
+            <input type="email" id="contactEmail" class="form-control" placeholder="tu@correo.com" oninput="validateField(this)">
+            <span class="field-error" id="emailError"></span>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-xs-12 form-group">
+            <label for="contactPhone">Teléfono / WhatsApp</label>
+            <input type="tel" id="contactPhone" class="form-control" placeholder="+51 999 000 000" oninput="formatPhone(this)">
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-xs-12 form-group">
+            <label for="contactMsg">Mensaje *</label>
+            <textarea id="contactMsg" class="form-control" rows="5" placeholder="¿En qué podemos ayudarte?" oninput="validateField(this)"></textarea>
+            <span class="field-error" id="msgError"></span>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-xs-12">
+            <button type="submit" class="btn btn-gold">Enviar Mensaje</button>
+          </div>
+        </div>
+      </form>
+      <div class="form-success hidden text-center" id="formSuccess">
+        <div class="success-icon">&#10003;</div>
+        <h3>¡Mensaje enviado!</h3>
+        <p>Nos pondremos en contacto contigo a la brevedad.</p>
+      </div>
+    </div>
+  </section>
 
-  if (nombre.value.trim().length < 3) {
-    document.getElementById("ckNombreErr").textContent = "Ingresa tu nombre completo.";
-    valido = false;
-  } else {
-    document.getElementById("ckNombreErr").textContent = "";
-  }
+  <footer class="footer">
+    <div class="container">
+      <div class="row footer-grid">
+        <div class="col-md-6 col-sm-12 footer-brand">
+          <img src="LOGO.png" alt="Calzados Paredes" class="footer-logo">
+          <p>Calzado Exclusivo para Dama · Trujillo, Perú · Desde 1985</p>
+        </div>
+        <div class="col-md-3 col-sm-6 footer-links">
+          <h4>Navegación</h4>
+          <ul>
+            <li><a href="#inicio">Inicio</a></li>
+            <li><a href="#modelos">Modelos</a></li>
+            <li><a href="#nosotros">Nosotros</a></li>
+            <li><a href="#contacto">Contacto</a></li>
+          </ul>
+        </div>
+        <div class="col-md-3 col-sm-6 footer-contact">
+          <h4>Contacto</h4>
+          <p>📍 C.C. APIAT Stand 206/135, Trujillo</p>
+          <p>📞 +51 985 666 816</p>
+          <p>📧 cpsacventas@gmail.com</p>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-xs-12 footer-bottom text-center">
+          <p>&copy; 2025 Calzados Paredes – Calzado Exclusivo para Dama. Todos los derechos reservados. Desde 1985.</p>
+        </div>
+      </div>
+    </div>
+  </footer>
 
-  if (telefono.value.trim().length < 7) {
-    document.getElementById("ckTelefonoErr").textContent = "Ingresa un teléfono válido.";
-    valido = false;
-  } else {
-    document.getElementById("ckTelefonoErr").textContent = "";
-  }
+  <div class="modal-overlay" id="checkoutOverlay" onclick="cerrarCheckout(event)">
+    <div class="modal-card" id="checkoutCard" style="max-width:480px">
+      <button class="modal-close" onclick="cerrarCheckout()">&times;</button>
+      <div style="padding:2rem">
+        <h2 style="margin:0 0 0.3rem;font-family:'Cormorant Garamond',serif;font-size:1.6rem">Datos del cliente</h2>
+        <p style="margin:0 0 1.5rem;color:#888;font-size:.9rem">Completa tu información para finalizar el pedido</p>
 
-  if (email.value.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) {
-    document.getElementById("ckEmailErr").textContent = "Correo inválido.";
-    valido = false;
-  } else {
-    document.getElementById("ckEmailErr").textContent = "";
-  }
+        <div id="checkoutForm">
+          <div class="form-group">
+            <label for="ckNombre">Nombre completo *</label>
+            <input type="text" id="ckNombre" class="form-control" placeholder="Tu nombre completo">
+            <span class="field-error" id="ckNombreErr"></span>
+          </div>
+          <div class="form-group">
+            <label for="ckTelefono">Teléfono / WhatsApp *</label>
+            <input type="tel" id="ckTelefono" class="form-control" placeholder="+51 999 000 000">
+            <span class="field-error" id="ckTelefonoErr"></span>
+          </div>
+          <div class="form-group">
+            <label for="ckEmail">Correo electrónico</label>
+            <input type="email" id="ckEmail" class="form-control" placeholder="tu@correo.com">
+            <span class="field-error" id="ckEmailErr"></span>
+          </div>
+          <div class="form-group">
+            <label for="ckDireccion">Dirección de entrega *</label>
+            <input type="text" id="ckDireccion" class="form-control" placeholder="Av. / Jr. / Calle...">
+            <span class="field-error" id="ckDireccionErr"></span>
+          </div>
+          <div class="form-group">
+            <label for="ckNota">Nota adicional</label>
+            <textarea id="ckNota" class="form-control" rows="2" placeholder="Referencias, instrucciones especiales..."></textarea>
+          </div>
+          <button class="btn btn-gold btn-full" style="margin-top:.5rem" onclick="enviarPedido()">Confirmar pedido</button>
+        </div>
 
-  if (direccion.value.trim().length < 5) {
-    document.getElementById("ckDireccionErr").textContent = "Ingresa una dirección válida.";
-    valido = false;
-  } else {
-    document.getElementById("ckDireccionErr").textContent = "";
-  }
+        <div id="checkoutSuccess" class="form-success hidden text-center">
+          <div class="success-icon">&#10003;</div>
+          <h3>¡Pedido registrado!</h3>
+          <p id="checkoutSuccessMsg"></p>
+        </div>
+      </div>
+    </div>
+  </div>
 
-  if (!valido) return;
+  <div class="toast" id="toast"></div>
+  <button class="back-to-top" id="backToTop" onclick="scrollToTop()" title="Volver arriba">&#8679;</button>
 
-  const total = estado.carrito.reduce((s, i) => s + i.precio * i.cantidad, 0);
-
-  const pedido = {
-    cliente: {
-      nombre:    nombre.value.trim(),
-      telefono:  telefono.value.trim(),
-      email:     email.value.trim(),
-      direccion: direccion.value.trim(),
-      nota:      nota.value.trim(),
-    },
-    items: estado.carrito.map((i) => ({
-      id:       i.id,
-      nombre:   i.nombre,
-      talla:    i.talla,
-      color:    i.color,
-      cantidad: i.cantidad,
-      precio:   i.precio,
-      subtotal: parseFloat((i.precio * i.cantidad).toFixed(2)),
-    })),
-    total: parseFloat(total.toFixed(2)),
-  };
-
-  fetch("/api/pedidos", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(pedido),
-  })
-    .then((r) => r.json())
-    .then((data) => {
-      estado.carrito = [];
-      actualizarCarritoUI();
-      document.getElementById("checkoutForm").classList.add("hidden");
-      document.getElementById("checkoutSuccess").classList.remove("hidden");
-      document.getElementById("checkoutSuccessMsg").textContent =
-        `Pedido #${data.id} registrado. Total: S/ ${total.toFixed(2)}. Nos contactaremos contigo pronto.`;
-    })
-    .catch(() => mostrarToast("Error al registrar el pedido. Intenta de nuevo."));
-}
-
-function validateField(field) {
-  const id = field.id;
-  let errorMsg = "";
-  const val = field.value.trim();
-
-  if (id === "contactName") {
-    if (val.length < 3) errorMsg = "El nombre debe tener al menos 3 caracteres.";
-  } else if (id === "contactEmail") {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(val)) errorMsg = "Ingresa un correo electrónico válido.";
-  } else if (id === "contactMsg") {
-    if (val.length < 10) errorMsg = "El mensaje debe tener al menos 10 caracteres.";
-  }
-
-  const errorMap = { contactName: "nameError", contactEmail: "emailError", contactMsg: "msgError" };
-  const errorEl = document.getElementById(errorMap[id]);
-  if (errorEl) errorEl.textContent = errorMsg;
-
-  field.classList.toggle("error", errorMsg !== "");
-  field.classList.toggle("valid", errorMsg === "" && val.length > 0);
-}
-
-function formatPhone(input) {
-  let val = input.value.replace(/[^\d+]/g, "");
-  if (val.startsWith("51") && val.length > 2) {
-    val = "+51 " + val.slice(2).replace(/(\d{3})(\d{3})(\d{3})/, "$1 $2 $3");
-  }
-  input.value = val;
-}
-
-function submitForm(e) {
-  e.preventDefault();
-  const name = document.getElementById("contactName");
-  const email = document.getElementById("contactEmail");
-  const msg = document.getElementById("contactMsg");
-  validateField(name);
-  validateField(email);
-  validateField(msg);
-  const hasErrors =
-    name.classList.contains("error") ||
-    !name.value.trim() ||
-    email.classList.contains("error") ||
-    !email.value.trim() ||
-    msg.classList.contains("error") ||
-    !msg.value.trim();
-  if (hasErrors) {
-    mostrarToast("⚠ Por favor completa todos los campos correctamente.");
-    return;
-  }
-  document.getElementById("contactForm").classList.add("hidden");
-  document.getElementById("formSuccess").classList.remove("hidden");
-  mostrarToast("✓ Mensaje enviado con éxito");
-}
-
-let toastTimeout = null;
-function mostrarToast(mensaje, duracion = 2800) {
-  const toast = document.getElementById("toast");
-  if (toastTimeout) clearTimeout(toastTimeout);
-  toast.textContent = mensaje;
-  toast.classList.add("show");
-  toastTimeout = setTimeout(() => {
-    toast.classList.remove("show");
-  }, duracion);
-}
-
-function scrollToTop() {
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-function iniciarScrollEvents() {
-  const backToTop = document.getElementById("backToTop");
-  const header = document.getElementById("mainHeader");
-  const heroScroll = document.getElementById("heroScroll");
-  window.addEventListener("scroll", () => {
-    const scrollY = window.scrollY;
-    backToTop.classList.toggle("visible", scrollY > 300);
-    header.classList.toggle("scrolled", scrollY > 80);
-    if (heroScroll) heroScroll.style.opacity = scrollY > 60 ? "0" : "1";
-  });
-}
-
-function iniciarAnimacionEstadisticas() {
-  const nums = document.querySelectorAll(".stat-num");
-  if (!nums.length) return;
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          animarNumero(entry.target);
-          observer.unobserve(entry.target);
-        }
-      });
-    },
-    { threshold: 0.5 }
-  );
-  nums.forEach((n) => observer.observe(n));
-}
-
-function animarNumero(el) {
-  const target = parseInt(el.dataset.target);
-  const duracion = 1400;
-  const step = target / (duracion / 16);
-  let current = 0;
-  const interval = setInterval(() => {
-    current += step;
-    if (current >= target) {
-      el.textContent = target.toLocaleString("es-PE");
-      clearInterval(interval);
-    } else {
-      el.textContent = Math.floor(current).toLocaleString("es-PE");
-    }
-  }, 16);
-}
-
-function iniciarNavActiva() {
-  function getAbsTop(el) {
-    let top = 0,
-      node = el;
-    while (node) {
-      top += node.offsetTop;
-      node = node.offsetParent;
-    }
-    return top;
-  }
-  const sectionMap = [
-    { id: "inicio", el: document.getElementById("inicio") },
-    { id: "modelos", el: document.getElementById("modelos") },
-    { id: "nosotros", el: document.getElementById("nosotros") },
-    { id: "contacto", el: document.getElementById("contacto") },
-  ]
-    .filter((s) => s.el)
-    .map((s) => ({ id: s.id, top: getAbsTop(s.el) }));
-
-  function actualizarNavActiva() {
-    const headerH = document.getElementById("mainHeader").offsetHeight;
-    const umbral = window.scrollY + headerH + 10;
-    let activa = sectionMap[0].id;
-    for (const s of sectionMap) {
-      if (s.top <= umbral) activa = s.id;
-    }
-    document.querySelectorAll(".nav-link").forEach((link) => {
-      link.classList.toggle("active", link.dataset.section === activa);
-    });
-  }
-  window.addEventListener("scroll", actualizarNavActiva, { passive: true });
-  actualizarNavActiva();
-}
-
-const menuToggle = document.getElementById("menuToggle");
-const navLinks = document.getElementById("navLinks");
-if (menuToggle) {
-  menuToggle.addEventListener("click", () => {
-    menuToggle.classList.toggle("open");
-    navLinks.classList.toggle("mobile-open");
-  });
-}
-
-document.querySelectorAll(".nav-link").forEach((link) => {
-  link.addEventListener("click", () => {
-    menuToggle.classList.remove("open");
-    navLinks.classList.remove("mobile-open");
-  });
-});
-
-function resetFilters() {
-  estado.filtroCategoria = "todos";
-  estado.textoBusqueda = "";
-  estado.ordenamiento = "default";
-  document.getElementById("searchInput").value = "";
-  document.getElementById("sortSelect").value = "default";
-  document.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
-  document.querySelector('.chip[data-cat="todos"]').classList.add("active");
-  renderProductos();
-}
-
-document.querySelectorAll('a[href^="#"]').forEach((link) => {
-  link.addEventListener("click", (e) => {
-    const targetId = link.getAttribute("href").replace("#", "");
-    const targetEl = document.getElementById(targetId);
-    if (!targetEl) return;
-    e.preventDefault();
-    if (menuToggle) menuToggle.classList.remove("open");
-    if (navLinks) navLinks.classList.remove("mobile-open");
-    const headerAltura = document.getElementById("mainHeader").offsetHeight;
-    const posicion = targetEl.getBoundingClientRect().top + window.scrollY - headerAltura;
-    window.scrollTo({ top: posicion, behavior: "smooth" });
-  });
-});
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+  <script src="Calzado.js"></script>
+</body>
+</html>
