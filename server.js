@@ -78,7 +78,7 @@ async function crearProducto(data) {
     .input("tipo", sql.NVarChar(50), tipo)
     .input("precio", sql.Decimal(10, 2), Number(precio))
     .input("descripcion", sql.NVarChar(sql.MAX), descripcion ?? "")
-    .input("imagen", sql.NVarChar(300), imagen ?? "")
+    .input("imagen", sql.NVarChar(sql.MAX), imagen ?? "")
     .input("colores", sql.NVarChar(sql.MAX), JSON.stringify(colores ?? []))
     .input("tallas", sql.NVarChar(sql.MAX), JSON.stringify(tallas ?? []))
     .input("tag", sql.NVarChar(50), tag ?? null)
@@ -102,7 +102,7 @@ async function actualizarProducto(id, data) {
     .input("tipo", sql.NVarChar(50), actualizado.tipo)
     .input("precio", sql.Decimal(10, 2), Number(actualizado.precio))
     .input("descripcion", sql.NVarChar(sql.MAX), actualizado.descripcion)
-    .input("imagen", sql.NVarChar(300), actualizado.imagen)
+    .input("imagen", sql.NVarChar(sql.MAX), actualizado.imagen)
     .input("colores", sql.NVarChar(sql.MAX), JSON.stringify(actualizado.colores ?? []))
     .input("tallas", sql.NVarChar(sql.MAX), JSON.stringify(actualizado.tallas ?? []))
     .input("tag", sql.NVarChar(50), actualizado.tag)
@@ -165,6 +165,14 @@ function enviarJSON(res, statusCode, data) {
   res.end(JSON.stringify(data, null, 2));
 }
 
+// Compara la contraseña enviada en el header x-admin-password contra la
+// configurada en el servidor. Se usa para proteger todas las rutas que
+// crean, editan o borran datos (productos y pedidos).
+function esAdmin(req) {
+  const claveAdmin = req.headers["x-admin-password"];
+  return Boolean(process.env.ADMIN_PASSWORD) && claveAdmin === process.env.ADMIN_PASSWORD;
+}
+
 function servirArchivo(res, filePath) {
   fs.readFile(filePath, (err, data) => {
     if (err) {
@@ -179,9 +187,19 @@ function servirArchivo(res, filePath) {
 }
 
 function leerBody(req) {
+  const LIMITE_BYTES = 8 * 1024 * 1024; // 8 MB, suficiente para una imagen en base64
   return new Promise((resolve, reject) => {
     let raw = "";
-    req.on("data", (chunk) => (raw += chunk));
+    let tamanio = 0;
+    req.on("data", (chunk) => {
+      tamanio += chunk.length;
+      if (tamanio > LIMITE_BYTES) {
+        reject(new Error("El cuerpo de la solicitud es demasiado grande (máx. 8MB)"));
+        req.destroy();
+        return;
+      }
+      raw += chunk;
+    });
     req.on("end", () => {
       try {
         resolve(raw ? JSON.parse(raw) : {});
@@ -228,6 +246,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (ruta === "/productos" && method === "POST") {
+        if (!esAdmin(req)) return enviarJSON(res, 401, { error: "No autorizado" });
         let body;
         try {
           body = await leerBody(req);
@@ -243,6 +262,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (matchId && method === "PUT") {
+        if (!esAdmin(req)) return enviarJSON(res, 401, { error: "No autorizado" });
         let body;
         try {
           body = await leerBody(req);
@@ -255,16 +275,14 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (matchId && method === "DELETE") {
+        if (!esAdmin(req)) return enviarJSON(res, 401, { error: "No autorizado" });
         const eliminado = await eliminarProducto(Number(matchId[1]));
         if (!eliminado) return enviarJSON(res, 404, { error: "Producto no encontrado" });
         return enviarJSON(res, 200, { mensaje: "Producto eliminado", producto: eliminado });
       }
 
       if (ruta === "/pedidos" && method === "GET") {
-        const claveAdmin = req.headers["x-admin-password"];
-        if (!process.env.ADMIN_PASSWORD || claveAdmin !== process.env.ADMIN_PASSWORD) {
-          return enviarJSON(res, 401, { error: "No autorizado" });
-        }
+        if (!esAdmin(req)) return enviarJSON(res, 401, { error: "No autorizado" });
         return enviarJSON(res, 200, await leerPedidos());
       }
 
