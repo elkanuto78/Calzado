@@ -126,7 +126,7 @@ function crearTarjeta(producto, index) {
         </div>
       </div>
       <div class="product-body">
-        <span class="product-badge">Cód. ${producto.codigo} · ${producto.tipo}</span>
+        <span class="product-badge">${producto.tipo}</span>
         <h3 class="product-name">${producto.nombre}</h3>
         <p class="product-desc">${producto.descripcion.substring(0, 68)}…</p>
       </div>
@@ -160,19 +160,6 @@ function abrirModal(id) {
   const modalImg = document.getElementById("modalImg");
   modalImg.src = p.imagen;
   modalImg.style.display = "block";
-
-  const thumbsContainer = document.getElementById("modalThumbs");
-  const vistas = ["Frontal", "Lateral", "Detalle"];
-  thumbsContainer.innerHTML = vistas
-    .map(
-      (v, i) => `
-    <div class="modal-thumb ${i === 0 ? "active" : ""}"
-         onclick="cambiarImagen(${i})" title="${v}">
-      <img src="${p.imagen}" alt="${v}" />
-    </div>
-  `
-    )
-    .join("");
 
   const sizesContainer = document.getElementById("modalSizes");
   sizesContainer.innerHTML = p.tallas
@@ -217,14 +204,6 @@ function closeModal(event) {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeModal();
 });
-
-function cambiarImagen(index) {
-  estado.imgIndexActual = index;
-  document.querySelectorAll(".modal-thumb").forEach((t, i) => {
-    t.classList.toggle("active", i === index);
-  });
-  mostrarToast(`Vista: ${["Frontal", "Lateral", "Detalle"][index]}`);
-}
 
 function seleccionarTalla(btn, talla) {
   document.querySelectorAll(".size-btn").forEach((b) => b.classList.remove("active"));
