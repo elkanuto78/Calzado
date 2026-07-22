@@ -250,7 +250,14 @@
     padding: 0.3rem 0.5rem 0.3rem 0.3rem;
     font-size: 0.85rem;
   }
-  .color-chip .swatch { width: 18px; height: 18px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.15); }
+  .color-chip .swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid rgba(0,0,0,0.15);
+    object-fit: cover;
+    background: var(--crema);
+  }
   .color-chip button {
     background: none;
     border: none;
@@ -260,7 +267,8 @@
     line-height: 1;
     padding: 0 0.2rem;
   }
-  .color-agregar { display: flex; gap: 0.4rem; align-items: center; }
+  .ayuda-colores { font-size: 0.78rem; color: var(--texto-suave); margin: -0.2rem 0 0.4rem; }
+  .color-agregar { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
   .color-agregar input[type="text"] {
     padding: 0.45rem 0.7rem;
     border: 1px solid var(--crema-oscura);
@@ -275,6 +283,25 @@
     border-radius: 8px;
     padding: 2px;
     cursor: pointer;
+  }
+  .color-imagen-picker {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    border: 1px dashed var(--crema-oscura);
+    border-radius: var(--radio);
+    padding: 0.3rem 0.6rem;
+    font-size: 0.78rem;
+    color: var(--texto-suave);
+    cursor: pointer;
+    background: var(--crema);
+  }
+  .color-imagen-picker:hover { border-color: var(--dorado); color: var(--marron); }
+  .color-imagen-picker img {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    object-fit: cover;
   }
   .btn-secundario {
     background: transparent;
@@ -440,11 +467,17 @@
             </div>
             <div class="campo full">
               <label>Colores</label>
+              <p class="ayuda-colores">Puedes asociar una foto a cada color (opcional); si no subes una, se usará la imagen principal del modelo.</p>
               <div class="colores-editor">
                 <div id="colores-lista" style="display:contents;"></div>
                 <div class="color-agregar">
                   <input type="color" id="mf-color-hex" value="#3f2601">
                   <input type="text" id="mf-color-nombre" placeholder="Nombre del color">
+                  <label class="color-imagen-picker">
+                    <img id="mf-color-imagen-preview" alt="">
+                    <span id="mf-color-imagen-texto">+ Foto</span>
+                    <input type="file" id="mf-color-imagen" accept="image/*" hidden>
+                  </label>
                   <button type="button" class="btn-secundario" id="btn-agregar-color">+ Agregar</button>
                 </div>
               </div>
