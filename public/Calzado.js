@@ -205,6 +205,27 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeModal();
 });
 
+// Zoom siguiendo el cursor sobre la imagen del modal de detalle (solo
+// en dispositivos con mouse; en celular/táctil no tiene efecto).
+(function initZoomImagenModal() {
+  const wrap = document.querySelector(".modal-img-wrap");
+  const img = document.getElementById("modalImg");
+  if (!wrap || !img) return;
+
+  wrap.addEventListener("mousemove", (e) => {
+    const rect = wrap.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    img.style.transformOrigin = `${x}% ${y}%`;
+    wrap.classList.add("zoom-activo");
+  });
+
+  wrap.addEventListener("mouseleave", () => {
+    wrap.classList.remove("zoom-activo");
+    img.style.transformOrigin = "center center";
+  });
+})();
+
 function seleccionarTalla(btn, talla) {
   document.querySelectorAll(".size-btn").forEach((b) => b.classList.remove("active"));
   btn.classList.add("active");
