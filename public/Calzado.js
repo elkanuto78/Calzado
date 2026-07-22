@@ -504,10 +504,11 @@ function formatPhone(input) {
   input.value = val;
 }
 
-function submitForm(e) {
+async function submitForm(e) {
   e.preventDefault();
   const name = document.getElementById("contactName");
   const email = document.getElementById("contactEmail");
+  const phone = document.getElementById("contactPhone");
   const msg = document.getElementById("contactMsg");
   validateField(name);
   validateField(email);
@@ -523,9 +524,42 @@ function submitForm(e) {
     mostrarToast("⚠ Por favor completa todos los campos correctamente.");
     return;
   }
-  document.getElementById("contactForm").classList.add("hidden");
-  document.getElementById("formSuccess").classList.remove("hidden");
-  mostrarToast("✓ Mensaje enviado con éxito");
+
+  const btnEnviar = document.querySelector("#contactForm button[type='submit']");
+  const textoOriginal = btnEnviar ? btnEnviar.textContent : null;
+  if (btnEnviar) {
+    btnEnviar.disabled = true;
+    btnEnviar.textContent = "Enviando...";
+  }
+
+  try {
+    const resp = await fetch("/api/contacto", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        nombre: name.value.trim(),
+        email: email.value.trim(),
+        telefono: phone ? phone.value.trim() : "",
+        mensaje: msg.value.trim(),
+      }),
+    });
+
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error || "No se pudo enviar tu mensaje.");
+    }
+
+    document.getElementById("contactForm").classList.add("hidden");
+    document.getElementById("formSuccess").classList.remove("hidden");
+    mostrarToast("✓ Mensaje enviado con éxito");
+  } catch (err) {
+    mostrarToast("⚠ " + err.message);
+  } finally {
+    if (btnEnviar) {
+      btnEnviar.disabled = false;
+      btnEnviar.textContent = textoOriginal;
+    }
+  }
 }
 
 let toastTimeout = null;
