@@ -7,13 +7,24 @@ BEGIN
     tipo        NVARCHAR(50) NOT NULL,
     precio      DECIMAL(10,2) NOT NULL,
     descripcion NVARCHAR(MAX) DEFAULT '',
-    imagen      NVARCHAR(300) DEFAULT '',
+    imagen      NVARCHAR(MAX) DEFAULT '',
     colores     NVARCHAR(MAX) DEFAULT '[]',  -- JSON: [{"nombre":"Negro","hex":"#111"}]
     tallas      NVARCHAR(MAX) DEFAULT '[]',  -- JSON: [35,36,37]
     tag         NVARCHAR(50) NULL,
     CONSTRAINT CK_productos_colores CHECK (ISJSON(colores) = 1),
     CONSTRAINT CK_productos_tallas  CHECK (ISJSON(tallas) = 1)
   );
+END;
+
+-- Migración para bases de datos ya existentes: la columna imagen se creó
+-- originalmente como NVARCHAR(300), muy pequeña para guardar imágenes en
+-- base64 subidas desde el panel admin. Se amplía a NVARCHAR(MAX) si hace falta.
+IF EXISTS (
+  SELECT 1 FROM sys.columns
+  WHERE object_id = OBJECT_ID('productos') AND name = 'imagen' AND max_length <> -1
+)
+BEGIN
+  ALTER TABLE productos ALTER COLUMN imagen NVARCHAR(MAX) NULL;
 END;
 
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'pedidos')
