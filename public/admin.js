@@ -3,6 +3,31 @@
 
   const STORAGE_KEY = "admin_password"; // guardado solo en sessionStorage (se borra al cerrar la pestaña)
 
+  // Redimensiona y comprime una imagen antes de convertirla a base64, para
+  // que las fotos del celular (que pueden pesar varios MB) no hagan pesado
+  // el formulario ni se acerquen al límite del servidor.
+  function leerImagenComprimida(archivo, maxAncho = 1000, calidad = 0.82) {
+    return new Promise((resolve, reject) => {
+      const lector = new FileReader();
+      lector.onerror = () => reject(new Error("No se pudo leer la imagen"));
+      lector.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error("No se pudo procesar la imagen"));
+        img.onload = () => {
+          const escala = Math.min(1, maxAncho / img.width);
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.round(img.width * escala);
+          canvas.height = Math.round(img.height * escala);
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/jpeg", calidad));
+        };
+        img.src = lector.result;
+      };
+      lector.readAsDataURL(archivo);
+    });
+  }
+
   const loginScreen = document.getElementById("login-screen");
   const dashboard = document.getElementById("dashboard");
   const passwordInput = document.getElementById("password-input");
@@ -227,6 +252,9 @@
   const coloresLista = document.getElementById("colores-lista");
   const mfColorHex = document.getElementById("mf-color-hex");
   const mfColorNombre = document.getElementById("mf-color-nombre");
+  const mfColorImagen = document.getElementById("mf-color-imagen");
+  const mfColorImagenPreview = document.getElementById("mf-color-imagen-preview");
+  const mfColorImagenTexto = document.getElementById("mf-color-imagen-texto");
   const btnAgregarColor = document.getElementById("btn-agregar-color");
   const btnGuardarModelo = document.getElementById("btn-guardar-modelo");
   const btnCancelarEdicion = document.getElementById("btn-cancelar-edicion");
@@ -237,13 +265,16 @@
 
   let productosCache = [];
   let coloresActuales = [];
+  let colorImagenPendiente = "";
   let imagenBase64Actual = "";
   let editandoId = null;
 
   function renderizarColores() {
     coloresLista.innerHTML = coloresActuales.map((c, i) => `
       <span class="color-chip">
-        <span class="swatch" style="background:${escaparHtml(c.hex)}"></span>
+        ${c.imagen
+          ? `<img class="swatch" src="${escaparHtml(c.imagen)}" alt="">`
+          : `<span class="swatch" style="background:${escaparHtml(c.hex)}"></span>`}
         ${escaparHtml(c.nombre)}
         <button type="button" data-i="${i}" aria-label="Quitar color">✕</button>
       </span>
@@ -257,14 +288,36 @@
     });
   }
 
+  mfColorImagen.addEventListener("change", async () => {
+    const archivo = mfColorImagen.files[0];
+    if (!archivo) return;
+    mfColorImagenTexto.textContent = "Procesando...";
+    try {
+      colorImagenPendiente = await leerImagenComprimida(archivo);
+      mfColorImagenPreview.src = colorImagenPendiente;
+      mfColorImagenTexto.textContent = "Foto ✓";
+    } catch (err) {
+      mfColorImagenTexto.textContent = "+ Foto";
+      alert("No se pudo procesar la imagen: " + err.message);
+    }
+  });
+
+  function limpiarPickerImagenColor() {
+    colorImagenPendiente = "";
+    mfColorImagen.value = "";
+    mfColorImagenPreview.src = "";
+    mfColorImagenTexto.textContent = "+ Foto";
+  }
+
   btnAgregarColor.addEventListener("click", () => {
     const nombre = mfColorNombre.value.trim();
     if (!nombre) {
       mfColorNombre.focus();
       return;
     }
-    coloresActuales.push({ nombre, hex: mfColorHex.value });
+    coloresActuales.push({ nombre, hex: mfColorHex.value, imagen: colorImagenPendiente || "" });
     mfColorNombre.value = "";
+    limpiarPickerImagenColor();
     renderizarColores();
   });
 
@@ -275,15 +328,15 @@
     }
   });
 
-  mfImagen.addEventListener("change", () => {
+  mfImagen.addEventListener("change", async () => {
     const archivo = mfImagen.files[0];
     if (!archivo) return;
-    const lector = new FileReader();
-    lector.onload = () => {
-      imagenBase64Actual = lector.result;
+    try {
+      imagenBase64Actual = await leerImagenComprimida(archivo, 1200, 0.85);
       mfImagenPreview.src = imagenBase64Actual;
-    };
-    lector.readAsDataURL(archivo);
+    } catch (err) {
+      alert("No se pudo procesar la imagen: " + err.message);
+    }
   });
 
   function limpiarFormularioModelo() {
@@ -292,6 +345,7 @@
     imagenBase64Actual = "";
     editandoId = null;
     mfImagenPreview.src = "";
+    limpiarPickerImagenColor();
     renderizarColores();
     modeloFormTitulo.textContent = "Nuevo modelo";
     btnGuardarModelo.textContent = "Guardar modelo";
@@ -361,6 +415,7 @@
     coloresActuales = Array.isArray(p.colores) ? p.colores.map((c) => ({ ...c })) : [];
     imagenBase64Actual = p.imagen || "";
     mfImagenPreview.src = imagenBase64Actual;
+    limpiarPickerImagenColor();
     renderizarColores();
 
     modeloFormTitulo.textContent = "Editando: " + p.nombre;
