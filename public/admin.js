@@ -193,6 +193,284 @@
   btnRefrescar.addEventListener("click", cargarPedidos);
   buscarInput.addEventListener("input", () => renderizarTabla(pedidosCache));
 
+  // ==================================================================
+  // Tabs
+  // ==================================================================
+  const tabBtns = document.querySelectorAll(".tab-btn");
+  const tabPanels = document.querySelectorAll(".tab-panel");
+
+  tabBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      tabBtns.forEach((b) => b.classList.remove("active"));
+      tabPanels.forEach((p) => p.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById(btn.dataset.tab).classList.add("active");
+      if (btn.dataset.tab === "tab-modelos" && productosCache.length === 0) {
+        cargarProductos();
+      }
+    });
+  });
+
+  // ==================================================================
+  // Modelos (productos)
+  // ==================================================================
+  const formModelo = document.getElementById("form-modelo");
+  const mfCodigo = document.getElementById("mf-codigo");
+  const mfNombre = document.getElementById("mf-nombre");
+  const mfTipo = document.getElementById("mf-tipo");
+  const mfPrecio = document.getElementById("mf-precio");
+  const mfTag = document.getElementById("mf-tag");
+  const mfTallas = document.getElementById("mf-tallas");
+  const mfDescripcion = document.getElementById("mf-descripcion");
+  const mfImagen = document.getElementById("mf-imagen");
+  const mfImagenPreview = document.getElementById("mf-imagen-preview");
+  const coloresLista = document.getElementById("colores-lista");
+  const mfColorHex = document.getElementById("mf-color-hex");
+  const mfColorNombre = document.getElementById("mf-color-nombre");
+  const btnAgregarColor = document.getElementById("btn-agregar-color");
+  const btnGuardarModelo = document.getElementById("btn-guardar-modelo");
+  const btnCancelarEdicion = document.getElementById("btn-cancelar-edicion");
+  const modeloMensaje = document.getElementById("modelo-mensaje");
+  const modeloFormTitulo = document.getElementById("modelo-form-titulo");
+  const productosEstadoCarga = document.getElementById("productos-estado-carga");
+  const productosGrid = document.getElementById("productos-grid");
+
+  let productosCache = [];
+  let coloresActuales = [];
+  let imagenBase64Actual = "";
+  let editandoId = null;
+
+  function renderizarColores() {
+    coloresLista.innerHTML = coloresActuales.map((c, i) => `
+      <span class="color-chip">
+        <span class="swatch" style="background:${escaparHtml(c.hex)}"></span>
+        ${escaparHtml(c.nombre)}
+        <button type="button" data-i="${i}" aria-label="Quitar color">✕</button>
+      </span>
+    `).join("");
+
+    coloresLista.querySelectorAll("button[data-i]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        coloresActuales.splice(Number(btn.dataset.i), 1);
+        renderizarColores();
+      });
+    });
+  }
+
+  btnAgregarColor.addEventListener("click", () => {
+    const nombre = mfColorNombre.value.trim();
+    if (!nombre) {
+      mfColorNombre.focus();
+      return;
+    }
+    coloresActuales.push({ nombre, hex: mfColorHex.value });
+    mfColorNombre.value = "";
+    renderizarColores();
+  });
+
+  mfColorNombre.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      btnAgregarColor.click();
+    }
+  });
+
+  mfImagen.addEventListener("change", () => {
+    const archivo = mfImagen.files[0];
+    if (!archivo) return;
+    const lector = new FileReader();
+    lector.onload = () => {
+      imagenBase64Actual = lector.result;
+      mfImagenPreview.src = imagenBase64Actual;
+    };
+    lector.readAsDataURL(archivo);
+  });
+
+  function limpiarFormularioModelo() {
+    formModelo.reset();
+    coloresActuales = [];
+    imagenBase64Actual = "";
+    editandoId = null;
+    mfImagenPreview.src = "";
+    renderizarColores();
+    modeloFormTitulo.textContent = "Nuevo modelo";
+    btnGuardarModelo.textContent = "Guardar modelo";
+    btnCancelarEdicion.style.display = "none";
+    modeloMensaje.textContent = "";
+    modeloMensaje.className = "";
+  }
+
+  btnCancelarEdicion.addEventListener("click", limpiarFormularioModelo);
+
+  async function cargarProductos() {
+    productosEstadoCarga.style.display = "block";
+    productosGrid.innerHTML = "";
+    try {
+      const resp = await fetch("/api/productos");
+      if (!resp.ok) throw new Error("Error del servidor: " + resp.status);
+      const data = await resp.json();
+      productosCache = Array.isArray(data.productos) ? data.productos : [];
+      renderizarProductos();
+    } catch (err) {
+      productosEstadoCarga.textContent = "No se pudieron cargar los modelos: " + err.message;
+      return;
+    }
+    productosEstadoCarga.style.display = "none";
+  }
+
+  function renderizarProductos() {
+    if (productosCache.length === 0) {
+      productosGrid.innerHTML = `<p style="color:var(--texto-suave);">Aún no hay modelos cargados.</p>`;
+      return;
+    }
+    productosGrid.innerHTML = productosCache.map((p) => `
+      <div class="producto-card">
+        <img src="${escaparHtml(p.imagen || "")}" alt="${escaparHtml(p.nombre)}" onerror="this.style.opacity=0.3">
+        <div class="info">
+          <div class="meta">Cód. ${escaparHtml(p.codigo || "")} · ${escaparHtml(p.tipo)}</div>
+          <div class="nombre">${escaparHtml(p.nombre)}</div>
+          <div class="precio">S/ ${Number(p.precio).toFixed(2)}</div>
+        </div>
+        <div class="acciones">
+          <button type="button" class="btn-editar" data-id="${p.id}">Editar</button>
+          <button type="button" class="btn-borrar" data-id="${p.id}">Eliminar</button>
+        </div>
+      </div>
+    `).join("");
+
+    productosGrid.querySelectorAll(".btn-editar").forEach((btn) => {
+      btn.addEventListener("click", () => cargarModeloEnFormulario(Number(btn.dataset.id)));
+    });
+    productosGrid.querySelectorAll(".btn-borrar").forEach((btn) => {
+      btn.addEventListener("click", () => borrarModelo(Number(btn.dataset.id)));
+    });
+  }
+
+  function cargarModeloEnFormulario(id) {
+    const p = productosCache.find((x) => x.id === id);
+    if (!p) return;
+
+    editandoId = id;
+    mfCodigo.value = p.codigo || "";
+    mfNombre.value = p.nombre || "";
+    mfTipo.value = p.tipo || "";
+    mfPrecio.value = p.precio || "";
+    mfTag.value = p.tag || "";
+    mfTallas.value = Array.isArray(p.tallas) ? p.tallas.join(",") : "";
+    mfDescripcion.value = p.descripcion || "";
+    coloresActuales = Array.isArray(p.colores) ? p.colores.map((c) => ({ ...c })) : [];
+    imagenBase64Actual = p.imagen || "";
+    mfImagenPreview.src = imagenBase64Actual;
+    renderizarColores();
+
+    modeloFormTitulo.textContent = "Editando: " + p.nombre;
+    btnGuardarModelo.textContent = "Actualizar modelo";
+    btnCancelarEdicion.style.display = "inline-block";
+    modeloMensaje.textContent = "";
+    modeloMensaje.className = "";
+
+    document.querySelector('.tab-btn[data-tab="tab-modelos"]').click();
+    formModelo.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function borrarModelo(id) {
+    const p = productosCache.find((x) => x.id === id);
+    if (!p) return;
+    if (!confirm(`¿Eliminar "${p.nombre}"? Esta acción no se puede deshacer.`)) return;
+
+    try {
+      const resp = await fetch(`/api/productos/${id}`, {
+        method: "DELETE",
+        headers: { "x-admin-password": getClave() },
+      });
+      if (resp.status === 401) {
+        alert("Sesión expirada. Vuelve a iniciar sesión.");
+        sessionStorage.removeItem(STORAGE_KEY);
+        mostrarLogin();
+        return;
+      }
+      if (!resp.ok) throw new Error("Error del servidor: " + resp.status);
+      await cargarProductos();
+      if (editandoId === id) limpiarFormularioModelo();
+    } catch (err) {
+      alert("No se pudo eliminar: " + err.message);
+    }
+  }
+
+  formModelo.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    modeloMensaje.textContent = "";
+    modeloMensaje.className = "";
+
+    const tallas = mfTallas.value
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .map((t) => (isNaN(Number(t)) ? t : Number(t)));
+
+    if (!imagenBase64Actual) {
+      modeloMensaje.textContent = "Selecciona una imagen para el modelo.";
+      modeloMensaje.className = "error";
+      return;
+    }
+    if (tallas.length === 0) {
+      modeloMensaje.textContent = "Ingresa al menos una talla.";
+      modeloMensaje.className = "error";
+      return;
+    }
+
+    const payload = {
+      codigo: mfCodigo.value.trim(),
+      nombre: mfNombre.value.trim(),
+      tipo: mfTipo.value,
+      precio: Number(mfPrecio.value),
+      tag: mfTag.value || null,
+      descripcion: mfDescripcion.value.trim(),
+      colores: coloresActuales,
+      tallas,
+      imagen: imagenBase64Actual,
+    };
+
+    btnGuardarModelo.disabled = true;
+    btnGuardarModelo.textContent = editandoId ? "Actualizando..." : "Guardando...";
+
+    try {
+      const url = editandoId ? `/api/productos/${editandoId}` : "/api/productos";
+      const metodo = editandoId ? "PUT" : "POST";
+      const resp = await fetch(url, {
+        method: metodo,
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-password": getClave(),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (resp.status === 401) {
+        sessionStorage.removeItem(STORAGE_KEY);
+        modeloMensaje.textContent = "Sesión expirada. Vuelve a iniciar sesión.";
+        modeloMensaje.className = "error";
+        mostrarLogin();
+        return;
+      }
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.error || "Error del servidor: " + resp.status);
+      }
+
+      modeloMensaje.textContent = editandoId ? "Modelo actualizado correctamente." : "Modelo creado correctamente.";
+      modeloMensaje.className = "exito";
+      await cargarProductos();
+      limpiarFormularioModelo();
+    } catch (err) {
+      modeloMensaje.textContent = "No se pudo guardar: " + err.message;
+      modeloMensaje.className = "error";
+    } finally {
+      btnGuardarModelo.disabled = false;
+      btnGuardarModelo.textContent = editandoId ? "Actualizar modelo" : "Guardar modelo";
+    }
+  });
+
   // Al cargar la página: si ya hay clave guardada en esta pestaña, entra directo
   if (getClave()) {
     mostrarDashboard();
