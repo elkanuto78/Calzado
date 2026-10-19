@@ -35,7 +35,41 @@ function mapearProducto(row) {
     colores: JSON.parse(row.colores || "[]"),
     tallas: JSON.parse(row.tallas || "[]"),
     tag: row.tag,
+    stock: parsearStock(row.stock),
   };
+}
+
+// stock = objeto { talla: cantidad } o null (null = "sin control de stock").
+function parsearStock(texto) {
+  if (texto === null || texto === undefined || texto === "") return null;
+  try {
+    const obj = JSON.parse(texto);
+    return obj && typeof obj === "object" && !Array.isArray(obj) ? obj : null;
+  } catch {
+    return null;
+  }
+}
+
+// Limpia el stock recibido: enteros >= 0. Si se pasan tallas, solo se
+// conservan esas y las que falten quedan en 0. null => sin control.
+function sanearStock(stock, tallas) {
+  if (stock === null || stock === undefined) return null;
+  if (typeof stock !== "object" || Array.isArray(stock)) return null;
+  const limpio = {};
+  const claves = Array.isArray(tallas) && tallas.length ? tallas.map(String) : Object.keys(stock);
+  for (const t of claves) {
+    const n = Math.floor(Number(stock[t]));
+    limpio[t] = Number.isFinite(n) && n > 0 ? Math.min(n, 100000) : 0;
+  }
+  return limpio;
+}
+
+// Crea la columna stock si todavía no existe (migración automática).
+async function asegurarEsquema() {
+  const pool = await getPool();
+  await pool.request().query(
+    "IF COL_LENGTH('productos','stock') IS NULL ALTER TABLE productos ADD stock NVARCHAR(MAX) NULL"
+  );
 }
 
 function mapearPedido(row) {
@@ -72,6 +106,7 @@ async function obtenerProducto(id) {
 async function crearProducto(data) {
   const pool = await getPool();
   const { nombre, tipo, precio, descripcion, imagen, colores, tallas, tag, codigo } = data;
+  const stock = sanearStock(data.stock, tallas);
   const { recordset } = await pool
     .request()
     .input("codigo", sql.NVarChar(10), codigo ?? "00")
@@ -83,9 +118,10 @@ async function crearProducto(data) {
     .input("colores", sql.NVarChar(sql.MAX), JSON.stringify(colores ?? []))
     .input("tallas", sql.NVarChar(sql.MAX), JSON.stringify(tallas ?? []))
     .input("tag", sql.NVarChar(50), tag ?? null)
-    .query(`INSERT INTO productos (codigo, nombre, tipo, precio, descripcion, imagen, colores, tallas, tag)
+    .input("stock", sql.NVarChar(sql.MAX), stock ? JSON.stringify(stock) : null)
+    .query(`INSERT INTO productos (codigo, nombre, tipo, precio, descripcion, imagen, colores, tallas, tag, stock)
             OUTPUT INSERTED.*
-            VALUES (@codigo, @nombre, @tipo, @precio, @descripcion, @imagen, @colores, @tallas, @tag)`);
+            VALUES (@codigo, @nombre, @tipo, @precio, @descripcion, @imagen, @colores, @tallas, @tag, @stock)`);
   return mapearProducto(recordset[0]);
 }
 
@@ -93,6 +129,8 @@ async function actualizarProducto(id, data) {
   const existente = await obtenerProducto(id);
   if (!existente) return null;
   const actualizado = { ...existente, ...data };
+  // Si el body no trae "stock" se conserva el actual; si trae null, se quita el control.
+  const stockFinal = sanearStock("stock" in data ? data.stock : existente.stock, actualizado.tallas);
 
   const pool = await getPool();
   const { recordset } = await pool
@@ -107,11 +145,43 @@ async function actualizarProducto(id, data) {
     .input("colores", sql.NVarChar(sql.MAX), JSON.stringify(actualizado.colores ?? []))
     .input("tallas", sql.NVarChar(sql.MAX), JSON.stringify(actualizado.tallas ?? []))
     .input("tag", sql.NVarChar(50), actualizado.tag)
+    .input("stock", sql.NVarChar(sql.MAX), stockFinal ? JSON.stringify(stockFinal) : null)
     .query(`UPDATE productos SET codigo=@codigo, nombre=@nombre, tipo=@tipo, precio=@precio,
-              descripcion=@descripcion, imagen=@imagen, colores=@colores, tallas=@tallas, tag=@tag
+              descripcion=@descripcion, imagen=@imagen, colores=@colores, tallas=@tallas, tag=@tag, stock=@stock
             OUTPUT INSERTED.*
             WHERE id=@id`);
   return recordset[0] ? mapearProducto(recordset[0]) : null;
+}
+
+// Ajusta el stock de una talla de forma atómica. Admite { delta } (suma/resta)
+// o { cantidad } (valor absoluto). Devuelve el producto actualizado.
+async function ajustarStock(id, { talla, delta, cantidad }) {
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    const { recordset } = await new sql.Request(tx)
+      .input("id", sql.Int, id)
+      .query("SELECT * FROM productos WITH (UPDLOCK, ROWLOCK) WHERE id = @id");
+    if (!recordset[0]) { await tx.rollback(); return { error: "Producto no encontrado", status: 404 }; }
+    const prod = mapearProducto(recordset[0]);
+    const clave = String(talla);
+    if (!prod.tallas.map(String).includes(clave)) { await tx.rollback(); return { error: "Talla no válida para este producto", status: 400 }; }
+    const stock = prod.stock || sanearStock({}, prod.tallas);
+    const actual = Number(stock[clave]) || 0;
+    const nuevo = cantidad !== undefined ? Math.floor(Number(cantidad)) : actual + Math.floor(Number(delta));
+    if (!Number.isFinite(nuevo)) { await tx.rollback(); return { error: "Cantidad inválida", status: 400 }; }
+    stock[clave] = Math.max(0, nuevo);
+    await new sql.Request(tx)
+      .input("id", sql.Int, id)
+      .input("stock", sql.NVarChar(sql.MAX), JSON.stringify(stock))
+      .query("UPDATE productos SET stock=@stock WHERE id=@id");
+    await tx.commit();
+    return { producto: { ...prod, stock } };
+  } catch (e) {
+    try { await tx.rollback(); } catch {}
+    throw e;
+  }
 }
 
 async function eliminarProducto(id) {
@@ -146,16 +216,63 @@ function obtenerFechaLima() {
 
 async function crearPedido({ cliente, items, total }) {
   const pool = await getPool();
-  const { recordset } = await pool
-    .request()
-    .input("fecha", sql.VarChar(30), obtenerFechaLima())
-    .input("cliente", sql.NVarChar(sql.MAX), JSON.stringify(cliente))
-    .input("items", sql.NVarChar(sql.MAX), JSON.stringify(items))
-    .input("total", sql.Decimal(10, 2), Number(total))
-    .query(`INSERT INTO pedidos (fecha, cliente, items, total)
-            OUTPUT INSERTED.*
-            VALUES (CAST(@fecha AS DATETIME2), @cliente, @items, @total)`);
-  return mapearPedido(recordset[0]);
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    // Unidades pedidas por producto y talla (sumando todos los colores).
+    const pedido = {};
+    for (const it of Array.isArray(items) ? items : []) {
+      const id = Number(it.id);
+      const cant = Math.floor(Number(it.cantidad)) || 0;
+      if (!Number.isInteger(id) || cant <= 0) continue;
+      const t = String(it.talla);
+      pedido[id] = pedido[id] || {};
+      pedido[id][t] = (pedido[id][t] || 0) + cant;
+    }
+
+    const faltantes = [];
+    const nuevos = {};
+    for (const id of Object.keys(pedido).map(Number).sort((a, b) => a - b)) {
+      const { recordset } = await new sql.Request(tx)
+        .input("id", sql.Int, id)
+        .query("SELECT id, nombre, stock FROM productos WITH (UPDLOCK, ROWLOCK) WHERE id = @id");
+      if (!recordset[0]) continue;
+      const stock = parsearStock(recordset[0].stock);
+      if (!stock) continue; // sin control de stock
+      for (const [talla, cant] of Object.entries(pedido[id])) {
+        const disp = Number(stock[talla]) || 0;
+        if (cant > disp) faltantes.push({ id, nombre: recordset[0].nombre, talla, disponible: disp });
+        else stock[talla] = disp - cant;
+      }
+      nuevos[id] = stock;
+    }
+
+    if (faltantes.length) {
+      await tx.rollback();
+      return { faltantes };
+    }
+
+    for (const [id, stock] of Object.entries(nuevos)) {
+      await new sql.Request(tx)
+        .input("id", sql.Int, Number(id))
+        .input("stock", sql.NVarChar(sql.MAX), JSON.stringify(stock))
+        .query("UPDATE productos SET stock=@stock WHERE id=@id");
+    }
+
+    const { recordset } = await new sql.Request(tx)
+      .input("fecha", sql.VarChar(30), obtenerFechaLima())
+      .input("cliente", sql.NVarChar(sql.MAX), JSON.stringify(cliente))
+      .input("items", sql.NVarChar(sql.MAX), JSON.stringify(items))
+      .input("total", sql.Decimal(10, 2), Number(total))
+      .query(`INSERT INTO pedidos (fecha, cliente, items, total)
+              OUTPUT INSERTED.*
+              VALUES (CAST(@fecha AS DATETIME2), @cliente, @items, @total)`);
+    await tx.commit();
+    return { pedido: mapearPedido(recordset[0]) };
+  } catch (e) {
+    try { await tx.rollback(); } catch {}
+    throw e;
+  }
 }
 
 function enviarJSON(res, statusCode, data) {
@@ -220,8 +337,8 @@ const server = http.createServer(async (req, res) => {
   if (method === "OPTIONS") {
     res.writeHead(204, {
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE",
-      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE",
+      "Access-Control-Allow-Headers": "Content-Type,x-admin-password",
     });
     return res.end();
   }
@@ -275,6 +392,31 @@ const server = http.createServer(async (req, res) => {
         return enviarJSON(res, 200, actualizado);
       }
 
+      const matchStock = ruta.match(/^\/productos\/(\d+)\/stock$/);
+      if (matchStock && (method === "PATCH" || method === "PUT")) {
+        if (!esAdmin(req)) return enviarJSON(res, 401, { error: "No autorizado" });
+        let body;
+        try {
+          body = await leerBody(req);
+        } catch (e) {
+          return enviarJSON(res, 400, { error: e.message });
+        }
+        const id = Number(matchStock[1]);
+        if (method === "PUT") {
+          // Reemplaza todo el stock (objeto) o lo quita (null).
+          const existente = await obtenerProducto(id);
+          if (!existente) return enviarJSON(res, 404, { error: "Producto no encontrado" });
+          const act = await actualizarProducto(id, { stock: body.stock ?? null });
+          return enviarJSON(res, 200, act);
+        }
+        if (body.talla === undefined || (body.delta === undefined && body.cantidad === undefined)) {
+          return enviarJSON(res, 400, { error: "Campos requeridos: talla y (delta o cantidad)" });
+        }
+        const r = await ajustarStock(id, body);
+        if (r.error) return enviarJSON(res, r.status, { error: r.error });
+        return enviarJSON(res, 200, r.producto);
+      }
+
       if (matchId && method === "DELETE") {
         if (!esAdmin(req)) return enviarJSON(res, 401, { error: "No autorizado" });
         const eliminado = await eliminarProducto(Number(matchId[1]));
@@ -298,8 +440,14 @@ const server = http.createServer(async (req, res) => {
         if (!cliente || !items || !total) {
           return enviarJSON(res, 400, { error: "Campos requeridos: cliente, items, total" });
         }
-        const nuevoPedido = await crearPedido(body);
-        return enviarJSON(res, 201, nuevoPedido);
+        const resultado = await crearPedido(body);
+        if (resultado.faltantes) {
+          return enviarJSON(res, 409, {
+            error: "Algunos productos ya no tienen stock suficiente",
+            detalle: resultado.faltantes,
+          });
+        }
+        return enviarJSON(res, 201, resultado.pedido);
       }
 
       if (ruta === "/contacto" && method === "POST") {
@@ -344,4 +492,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Servidor Calzados Paredes corriendo en http://localhost:${PORT}`);
+  asegurarEsquema()
+    .then(() => console.log("Esquema verificado (columna stock lista)"))
+    .catch((e) => console.error("No se pudo verificar el esquema:", e.message));
 });
