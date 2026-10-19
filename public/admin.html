@@ -234,6 +234,33 @@
     flex-shrink: 0;
   }
 
+  .dropzone {
+    border: 2px dashed var(--crema-oscura);
+    border-radius: 14px;
+    background: var(--crema);
+    transition: border-color .2s, background .2s, transform .2s;
+  }
+  .dropzone:hover, .dropzone.arrastrando { border-color: var(--dorado); background: #fbf3dc; }
+  .dropzone.arrastrando { transform: scale(1.01); }
+  .dz-vacio {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 0.35rem; padding: 2rem 1rem; cursor: pointer; text-align: center; color: var(--texto-suave);
+  }
+  .dz-vacio svg { color: var(--dorado); margin-bottom: 0.2rem; }
+  .dz-titulo { font-size: 1rem; font-weight: 500; color: var(--marron); }
+  .dz-sub { font-size: 0.82rem; }
+  .dz-sub u { color: var(--marron); text-decoration-color: var(--dorado); }
+  .dz-lleno { display: flex; gap: 1.2rem; align-items: center; padding: 0.9rem; flex-wrap: wrap; }
+  .dz-lleno[hidden], .dz-vacio[hidden] { display: none; }
+  .dz-img {
+    width: 150px; height: 150px; object-fit: cover; border-radius: 12px;
+    background: var(--blanco); box-shadow: var(--sombra); flex-shrink: 0;
+  }
+  .dz-acciones { display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-start; }
+  .dz-ok { font-size: 0.85rem; color: #1e6b34; font-weight: 500; }
+  .dz-btn { color: var(--marron); cursor: pointer; padding: 0.45rem 1rem; font-size: 0.85rem; display: inline-block; }
+  .dz-quitar { color: #a32d2d; border-color: #e3b5b3; }
+
   .colores-editor {
     display: flex;
     flex-wrap: wrap;
@@ -534,9 +561,21 @@
             </div>
             <div class="campo full">
               <label for="mf-imagen">Imagen del modelo *</label>
-              <div class="imagen-picker">
-                <img id="mf-imagen-preview" class="imagen-preview" alt="Vista previa">
-                <input type="file" id="mf-imagen" accept="image/*">
+              <div class="dropzone" id="mf-dropzone">
+                <input type="file" id="mf-imagen" accept="image/*" hidden>
+                <label for="mf-imagen" class="dz-vacio" id="mf-dz-vacio">
+                  <svg viewBox="0 0 24 24" width="38" height="38" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="9" r="1.6"/><path d="M21 16l-5-5-8 8"/><path d="M14 4v0"/></svg>
+                  <span class="dz-titulo">Arrastra la foto aquí</span>
+                  <span class="dz-sub">o <u>haz clic para elegir</u> · JPG, PNG o WEBP</span>
+                </label>
+                <div class="dz-lleno" id="mf-dz-lleno" hidden>
+                  <img id="mf-imagen-preview" class="dz-img" alt="Vista previa">
+                  <div class="dz-acciones">
+                    <span class="dz-ok">✓ Imagen lista</span>
+                    <label for="mf-imagen" class="btn-secundario dz-btn">Cambiar</label>
+                    <button type="button" class="btn-secundario dz-btn dz-quitar" id="mf-dz-quitar">Quitar</button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
