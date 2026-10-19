@@ -11,6 +11,7 @@ BEGIN
     colores     NVARCHAR(MAX) DEFAULT '[]',  -- JSON: [{"nombre":"Negro","hex":"#111"}]
     tallas      NVARCHAR(MAX) DEFAULT '[]',  -- JSON: [35,36,37]
     tag         NVARCHAR(50) NULL,
+    stock       NVARCHAR(MAX) NULL,           -- JSON: {"37":5,"38":0}; NULL = sin control de stock
     CONSTRAINT CK_productos_colores CHECK (ISJSON(colores) = 1),
     CONSTRAINT CK_productos_tallas  CHECK (ISJSON(tallas) = 1)
   );
@@ -25,6 +26,12 @@ IF EXISTS (
 )
 BEGIN
   ALTER TABLE productos ALTER COLUMN imagen NVARCHAR(MAX) NULL;
+END;
+
+-- Stock por talla (JSON). NULL = sin control de stock (siempre disponible).
+IF COL_LENGTH('productos', 'stock') IS NULL
+BEGIN
+  ALTER TABLE productos ADD stock NVARCHAR(MAX) NULL;
 END;
 
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'pedidos')
