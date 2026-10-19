@@ -329,15 +329,48 @@
     }
   });
 
-  mfImagen.addEventListener("change", async () => {
-    const archivo = mfImagen.files[0];
+  const dropzone = document.getElementById("mf-dropzone");
+  const dzVacio = document.getElementById("mf-dz-vacio");
+  const dzLleno = document.getElementById("mf-dz-lleno");
+
+  function refrescarDropzone() {
+    const hay = Boolean(imagenBase64Actual);
+    dzVacio.hidden = hay;
+    dzLleno.hidden = !hay;
+    if (hay) mfImagenPreview.src = imagenBase64Actual;
+  }
+
+  async function procesarArchivoImagen(archivo) {
     if (!archivo) return;
+    if (!archivo.type.startsWith("image/")) {
+      alert("El archivo debe ser una imagen.");
+      return;
+    }
     try {
       imagenBase64Actual = await leerImagenComprimida(archivo, 1200, 0.85);
-      mfImagenPreview.src = imagenBase64Actual;
+      refrescarDropzone();
     } catch (err) {
       alert("No se pudo procesar la imagen: " + err.message);
     }
+  }
+
+  mfImagen.addEventListener("change", () => {
+    procesarArchivoImagen(mfImagen.files[0]);
+    mfImagen.value = "";
+  });
+
+  ["dragenter", "dragover"].forEach((ev) =>
+    dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.add("arrastrando"); })
+  );
+  ["dragleave", "drop"].forEach((ev) =>
+    dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.remove("arrastrando"); })
+  );
+  dropzone.addEventListener("drop", (e) => procesarArchivoImagen(e.dataTransfer.files[0]));
+
+  document.getElementById("mf-dz-quitar").addEventListener("click", () => {
+    imagenBase64Actual = "";
+    mfImagenPreview.src = "";
+    refrescarDropzone();
   });
 
   // ---- Stock dentro del formulario de modelos ----
@@ -381,6 +414,7 @@
     imagenBase64Actual = "";
     editandoId = null;
     mfImagenPreview.src = "";
+    refrescarDropzone();
     limpiarPickerImagenColor();
     renderizarColores();
     modeloFormTitulo.textContent = "Nuevo modelo";
@@ -457,7 +491,7 @@
     mfDescripcion.value = p.descripcion || "";
     coloresActuales = Array.isArray(p.colores) ? p.colores.map((c) => ({ ...c })) : [];
     imagenBase64Actual = p.imagen || "";
-    mfImagenPreview.src = imagenBase64Actual;
+    refrescarDropzone();
     limpiarPickerImagenColor();
     renderizarColores();
 
