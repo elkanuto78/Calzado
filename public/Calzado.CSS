@@ -1373,3 +1373,19 @@ img { max-width: 100%; display: block; }
   .filters-header .col-sm-7,
   .filters-header .col-sm-5 { width: 100%; text-align: left !important; }
 }
+
+
+/* ---- Stock ---- */
+.product-tag.agotado { background: #555; color: #fff; }
+.product-card.sin-stock .product-img { filter: grayscale(0.85); opacity: 0.7; }
+.size-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.size-quedan { font-size: 10px; color: #a32d2d; white-space: nowrap; }
+.size-btn.agotada,
+.size-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  text-decoration: line-through;
+  background: var(--crema);
+}
+.size-btn.agotada:hover { border-color: var(--crema-oscura); }
+.btn:disabled, .btn-gold:disabled { opacity: 0.5; cursor: not-allowed; }

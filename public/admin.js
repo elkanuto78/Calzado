@@ -233,6 +233,7 @@
       if (btn.dataset.tab === "tab-modelos" && productosCache.length === 0) {
         cargarProductos();
       }
+      if (btn.dataset.tab === "tab-stock") cargarProductos();
     });
   });
 
@@ -339,6 +340,41 @@
     }
   });
 
+  // ---- Stock dentro del formulario de modelos ----
+  const stockActivar = document.getElementById("mf-stock-activar");
+  const stockCampos = document.getElementById("mf-stock-campos");
+  let stockFormActual = null;
+
+  function tallasDelForm() {
+    return mfTallas.value.split(",").map((t) => t.trim()).filter(Boolean);
+  }
+
+  function renderizarStockForm() {
+    if (!stockActivar.checked) { stockCampos.innerHTML = ""; return; }
+    // conserva lo ya escrito al cambiar las tallas
+    stockCampos.querySelectorAll("input[data-talla]").forEach((i) => {
+      stockFormActual = stockFormActual || {};
+      stockFormActual[i.dataset.talla] = i.value;
+    });
+    stockCampos.innerHTML = tallasDelForm().map((t) => `
+      <label>Talla ${escaparHtml(t)}
+        <input type="number" min="0" step="1" data-talla="${escaparHtml(t)}" value="${Number((stockFormActual || {})[t]) || 0}">
+      </label>`).join("");
+  }
+
+  function leerStockForm(tallas) {
+    if (!stockActivar.checked) return null;
+    const out = {};
+    tallas.forEach((t) => {
+      const inp = stockCampos.querySelector(`input[data-talla="${CSS.escape(String(t))}"]`);
+      out[String(t)] = Math.max(0, Math.floor(Number(inp ? inp.value : 0)) || 0);
+    });
+    return out;
+  }
+
+  stockActivar.addEventListener("change", renderizarStockForm);
+  mfTallas.addEventListener("input", renderizarStockForm);
+
   function limpiarFormularioModelo() {
     formModelo.reset();
     coloresActuales = [];
@@ -352,6 +388,9 @@
     btnCancelarEdicion.style.display = "none";
     modeloMensaje.textContent = "";
     modeloMensaje.className = "";
+    stockFormActual = null;
+    stockActivar.checked = false;
+    renderizarStockForm();
   }
 
   btnCancelarEdicion.addEventListener("click", limpiarFormularioModelo);
@@ -365,6 +404,7 @@
       const data = await resp.json();
       productosCache = Array.isArray(data.productos) ? data.productos : [];
       renderizarProductos();
+      renderizarStock();
     } catch (err) {
       productosEstadoCarga.textContent = "No se pudieron cargar los modelos: " + err.message;
       return;
@@ -411,6 +451,9 @@
     mfPrecio.value = p.precio || "";
     mfTag.value = p.tag || "";
     mfTallas.value = Array.isArray(p.tallas) ? p.tallas.join(",") : "";
+    stockFormActual = p.stock ? { ...p.stock } : null;
+    stockActivar.checked = Boolean(p.stock);
+    renderizarStockForm();
     mfDescripcion.value = p.descripcion || "";
     coloresActuales = Array.isArray(p.colores) ? p.colores.map((c) => ({ ...c })) : [];
     imagenBase64Actual = p.imagen || "";
@@ -484,6 +527,7 @@
       colores: coloresActuales,
       tallas,
       imagen: imagenBase64Actual,
+      stock: leerStockForm(tallas),
     };
 
     btnGuardarModelo.disabled = true;
@@ -525,6 +569,163 @@
       btnGuardarModelo.textContent = editandoId ? "Actualizar modelo" : "Guardar modelo";
     }
   });
+
+  // ==================================================================
+  // Pestaña Stock
+  // ==================================================================
+  const UMBRAL_BAJO = 3;
+  const stockLista = document.getElementById("stock-lista");
+  const stockBuscar = document.getElementById("stock-buscar");
+  const stockFiltro = document.getElementById("stock-filtro");
+  const stockMensaje = document.getElementById("stock-mensaje");
+
+  function msgStock(texto, error) {
+    stockMensaje.textContent = texto || "";
+    stockMensaje.style.color = error ? "#a32d2d" : "#1e6b34";
+    if (texto) setTimeout(() => { if (stockMensaje.textContent === texto) stockMensaje.textContent = ""; }, 3500);
+  }
+
+  function estadoStock(p) {
+    if (!p.stock) return "sin";
+    const v = (p.tallas || []).map((t) => Number(p.stock[String(t)]) || 0);
+    if (v.length && v.every((n) => n === 0)) return "agotado";
+    if (v.some((n) => n === 0)) return "bajo";
+    if (v.some((n) => n <= UMBRAL_BAJO)) return "bajo";
+    return "ok";
+  }
+
+  function renderizarStock() {
+    let unidades = 0, bajo = 0, agotados = 0;
+    productosCache.forEach((p) => {
+      const e = estadoStock(p);
+      if (p.stock) unidades += Object.values(p.stock).reduce((a, b) => a + (Number(b) || 0), 0);
+      if (e === "bajo") bajo++;
+      if (e === "agotado") agotados++;
+    });
+    document.getElementById("st-modelos").textContent = productosCache.length;
+    document.getElementById("st-unidades").textContent = unidades;
+    document.getElementById("st-bajo").textContent = bajo;
+    document.getElementById("st-agotado").textContent = agotados;
+
+    const q = stockBuscar.value.trim().toLowerCase();
+    const filtro = stockFiltro.value;
+    const lista = productosCache.filter((p) => {
+      if (q && !(`${p.nombre} ${p.codigo || ""} ${p.tipo}`.toLowerCase().includes(q))) return false;
+      const e = estadoStock(p);
+      if (filtro === "bajo") return e === "bajo" || e === "agotado";
+      if (filtro === "agotado") return p.stock && (p.tallas || []).some((t) => !(Number(p.stock[String(t)]) > 0));
+      if (filtro === "sin") return e === "sin";
+      return true;
+    });
+
+    if (lista.length === 0) {
+      stockLista.innerHTML = `<p style="color:var(--texto-suave);">No hay modelos para mostrar.</p>`;
+      return;
+    }
+
+    const etiquetas = { ok: "En stock", bajo: "Stock bajo", agotado: "Agotado", sin: "Sin control" };
+    stockLista.innerHTML = lista.map((p) => {
+      const e = estadoStock(p);
+      const tallasHtml = p.stock
+        ? (p.tallas || []).map((t) => {
+            const n = Number(p.stock[String(t)]) || 0;
+            const cls = n === 0 ? "cero" : n <= UMBRAL_BAJO ? "bajo" : "";
+            return `<div class="stock-talla ${cls}">${escaparHtml(String(t))}
+              <div class="ctl">
+                <button type="button" data-accion="menos" data-id="${p.id}" data-talla="${escaparHtml(String(t))}">−</button>
+                <input type="number" min="0" step="1" value="${n}" data-id="${p.id}" data-talla="${escaparHtml(String(t))}" data-orig="${n}">
+                <button type="button" data-accion="mas" data-id="${p.id}" data-talla="${escaparHtml(String(t))}">+</button>
+              </div></div>`;
+          }).join("")
+        : `<span style="font-size:0.85rem; color:var(--texto-suave);">Este modelo siempre aparece disponible. Actívalo para controlar las unidades por talla.</span>`;
+      const total = p.stock ? Object.values(p.stock).reduce((a, b) => a + (Number(b) || 0), 0) : null;
+      return `<div class="stock-fila">
+        <img src="${escaparHtml(p.imagen || "")}" alt="" onerror="this.style.opacity=0.3">
+        <div class="stock-info">
+          <div class="stock-nombre">${escaparHtml(p.nombre)}</div>
+          <div class="stock-meta">Cód. ${escaparHtml(p.codigo || "")} · ${escaparHtml(p.tipo)}${total !== null ? " · " + total + " uds." : ""}</div>
+          <div class="stock-tallas">${tallasHtml}</div>
+        </div>
+        <div class="stock-lado">
+          <span class="badge-stock ${e === "ok" ? "" : e}">${etiquetas[e]}</span>
+          ${p.stock
+            ? `<button type="button" class="btn-secundario" data-accion="quitar" data-id="${p.id}">Quitar control</button>`
+            : `<button type="button" class="btn-dorado" data-accion="activar" data-id="${p.id}">Activar control</button>`}
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  async function llamarStock(id, metodo, cuerpo) {
+    const resp = await fetch(`/api/productos/${id}/stock`, {
+      method: metodo,
+      headers: { "Content-Type": "application/json", "x-admin-password": getClave() },
+      body: JSON.stringify(cuerpo),
+    });
+    if (resp.status === 401) {
+      sessionStorage.removeItem(STORAGE_KEY);
+      mostrarLogin("Sesión expirada. Vuelve a iniciar sesión.");
+      throw new Error("Sesión expirada");
+    }
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || "Error del servidor: " + resp.status);
+    return data;
+  }
+
+  function reemplazarProducto(nuevo) {
+    const i = productosCache.findIndex((x) => x.id === nuevo.id);
+    if (i >= 0) productosCache[i] = nuevo;
+    renderizarStock();
+  }
+
+  stockLista.addEventListener("click", async (ev) => {
+    const btn = ev.target.closest("button[data-accion]");
+    if (!btn) return;
+    const id = Number(btn.dataset.id);
+    const p = productosCache.find((x) => x.id === id);
+    if (!p) return;
+    try {
+      if (btn.dataset.accion === "mas" || btn.dataset.accion === "menos") {
+        const delta = btn.dataset.accion === "mas" ? 1 : -1;
+        const actual = Number((p.stock || {})[btn.dataset.talla]) || 0;
+        if (delta < 0 && actual === 0) return;
+        reemplazarProducto(await llamarStock(id, "PATCH", { talla: btn.dataset.talla, delta }));
+      } else if (btn.dataset.accion === "activar") {
+        const txt = prompt(`Unidades iniciales por talla para "${p.nombre}" (puedes cambiarlas luego):`, "0");
+        if (txt === null) return;
+        const n = Math.max(0, Math.floor(Number(txt)) || 0);
+        const stock = {};
+        (p.tallas || []).forEach((t) => (stock[String(t)] = n));
+        reemplazarProducto(await llamarStock(id, "PUT", { stock }));
+        msgStock("Control de stock activado.");
+      } else if (btn.dataset.accion === "quitar") {
+        if (!confirm(`¿Quitar el control de stock de "${p.nombre}"? Quedará siempre disponible.`)) return;
+        reemplazarProducto(await llamarStock(id, "PUT", { stock: null }));
+        msgStock("Control de stock quitado.");
+      }
+    } catch (err) {
+      msgStock("No se pudo actualizar: " + err.message, true);
+      renderizarStock();
+    }
+  });
+
+  stockLista.addEventListener("change", async (ev) => {
+    const inp = ev.target.closest("input[data-talla]");
+    if (!inp) return;
+    const id = Number(inp.dataset.id);
+    const n = Math.max(0, Math.floor(Number(inp.value)) || 0);
+    try {
+      reemplazarProducto(await llamarStock(id, "PATCH", { talla: inp.dataset.talla, cantidad: n }));
+      msgStock("Stock guardado.");
+    } catch (err) {
+      msgStock("No se pudo guardar: " + err.message, true);
+      renderizarStock();
+    }
+  });
+
+  stockBuscar.addEventListener("input", renderizarStock);
+  stockFiltro.addEventListener("change", renderizarStock);
+  document.getElementById("stock-refrescar").addEventListener("click", cargarProductos);
 
   // Al cargar la página: si ya hay clave guardada en esta pestaña, entra directo
   if (getClave()) {

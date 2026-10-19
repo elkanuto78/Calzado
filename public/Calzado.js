@@ -27,6 +27,34 @@ document.addEventListener("DOMContentLoaded", () => {
   iniciarNavActiva();
 });
 
+// ---- Stock ----
+// producto.stock = { talla: unidades } o null (sin control => siempre disponible)
+function stockDeTalla(p, talla) {
+  if (!p || !p.stock) return Infinity;
+  const n = Number(p.stock[String(talla)]);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function productoAgotado(p) {
+  return Boolean(p && p.stock) && (p.tallas || []).every((t) => stockDeTalla(p, t) <= 0);
+}
+
+function unidadesEnCarrito(id, talla) {
+  return estado.carrito
+    .filter((c) => c.id === id && String(c.talla) === String(talla))
+    .reduce((s, c) => s + c.cantidad, 0);
+}
+
+function recargarProductos() {
+  return fetch("/api/productos")
+    .then((r) => r.json())
+    .then((data) => {
+      PRODUCTOS = data.productos;
+      renderProductos();
+    })
+    .catch(() => {});
+}
+
 function filterProducts() {
   const input = document.getElementById("searchInput");
   estado.filtroCategoria = "todos";
@@ -109,12 +137,15 @@ function renderProductos() {
 
 function crearTarjeta(producto, index) {
   const esFavorito = estado.favoritos.includes(producto.id);
-  const tagHtml = producto.tag
+  const agotado = productoAgotado(producto);
+  const tagHtml = agotado
+    ? `<span class="product-tag agotado">Agotado</span>`
+    : producto.tag
     ? `<span class="product-tag ${producto.tag === "oferta" ? "oferta" : ""}">${producto.tag}</span>`
     : "";
 
   return `
-    <div class="product-card" style="animation-delay: ${index * 0.06}s"
+    <div class="product-card ${agotado ? "sin-stock" : ""}" style="animation-delay: ${index * 0.06}s"
          onclick="abrirModal(${producto.id})">
       <div class="product-img-wrapper">
         ${tagHtml}
@@ -163,8 +194,23 @@ function abrirModal(id) {
 
   const sizesContainer = document.getElementById("modalSizes");
   sizesContainer.innerHTML = p.tallas
-    .map((t) => `<button class="size-btn" onclick="seleccionarTalla(this, ${t})">${t}</button>`)
+    .map((t) => {
+      const disp = stockDeTalla(p, t);
+      const arg = JSON.stringify(t).replace(/"/g, "&quot;");
+      if (disp <= 0) {
+        return `<button class="size-btn agotada" disabled title="Agotada">${t}</button>`;
+      }
+      const poco = disp <= 5 ? `<span class="size-quedan">${disp === 1 ? "Última" : "Quedan " + disp}</span>` : "";
+      return `<div class="size-wrap"><button class="size-btn" onclick="seleccionarTalla(this, ${arg})">${t}</button>${poco}</div>`;
+    })
     .join("");
+
+  const btnAgregar = document.getElementById("btnAddToCart");
+  if (btnAgregar) {
+    const sinStock = productoAgotado(p);
+    btnAgregar.disabled = sinStock;
+    btnAgregar.textContent = sinStock ? "Agotado" : "Añadir al carrito";
+  }
 
   const colores = Array.isArray(p.colores) ? p.colores : [p.colores];
   const colorsContainer = document.getElementById("modalColors");
@@ -291,6 +337,16 @@ function addToCart() {
   if (!estado.productoActual) return;
   if (!estado.tallaSeleccionada) {
     mostrarToast("⚠ Por favor elige una talla");
+    return;
+  }
+  const disp = stockDeTalla(estado.productoActual, estado.tallaSeleccionada);
+  const enCarrito = unidadesEnCarrito(estado.productoActual.id, estado.tallaSeleccionada);
+  if (enCarrito + 1 > disp) {
+    mostrarToast(
+      disp <= 0
+        ? "⚠ Esa talla está agotada"
+        : `⚠ Solo hay ${disp} unidad(es) en talla ${estado.tallaSeleccionada} y ya las tienes en el carrito`
+    );
     return;
   }
   const item = {
@@ -462,8 +518,18 @@ function enviarPedido() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(pedido),
   })
-    .then((r) => r.json())
+    .then(async (r) => {
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const err = new Error(data.error || "Error del servidor");
+        err.status = r.status;
+        err.detalle = data.detalle;
+        throw err;
+      }
+      return data;
+    })
     .then((data) => {
+      recargarProductos();
       estado.carrito = [];
       actualizarCarritoUI();
       document.getElementById("checkoutForm").classList.add("hidden");
@@ -471,7 +537,17 @@ function enviarPedido() {
       document.getElementById("checkoutSuccessMsg").textContent =
         `Pedido #${data.id} registrado. Total: S/ ${total.toFixed(2)}. Nos contactaremos contigo pronto.`;
     })
-    .catch(() => mostrarToast("Error al registrar el pedido. Intenta de nuevo."));
+    .catch((err) => {
+      if (err.status === 409 && Array.isArray(err.detalle)) {
+        const lista = err.detalle
+          .map((d) => `${d.nombre} (talla ${d.talla}): ${d.disponible > 0 ? "quedan " + d.disponible : "agotado"}`)
+          .join(" · ");
+        mostrarToast("⚠ Sin stock suficiente — " + lista + ". Ajusta tu carrito.", 7000);
+        recargarProductos();
+      } else {
+        mostrarToast("Error al registrar el pedido. Intenta de nuevo.");
+      }
+    });
 }
 
 function validateField(field) {

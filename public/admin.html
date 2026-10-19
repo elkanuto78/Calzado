@@ -353,6 +353,47 @@
   .producto-card .acciones .btn-borrar { color: #b02a2a; border-color: #e0b0b0; }
   .producto-card .acciones .btn-borrar:hover { background: rgba(176,42,42,0.06); }
   .producto-card .acciones .btn-editar:hover { background: rgba(201,168,76,0.1); }
+
+  /* ---- Stock ---- */
+  .stock-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.8rem; margin-bottom: 1.2rem; }
+  .stock-stats .stat-card { padding: 0.9rem 1rem; }
+  .stock-stats .valor { font-size: 1.6rem; }
+  .stock-toolbar { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .stock-toolbar input, .stock-toolbar select {
+    padding: 0.6rem 0.8rem; border: 1px solid var(--crema-oscura); border-radius: var(--radio);
+    font-family: var(--fuente-cuerpo); font-size: 0.92rem; background: var(--blanco);
+  }
+  .stock-toolbar input { flex: 1; min-width: 200px; }
+  .stock-fila {
+    display: flex; gap: 1rem; align-items: flex-start; background: var(--blanco);
+    border-radius: var(--radio); box-shadow: var(--sombra); padding: 0.9rem 1rem; margin-bottom: 0.8rem;
+  }
+  .stock-fila img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; background: var(--crema); flex: 0 0 auto; }
+  .stock-fila .stock-info { flex: 1; min-width: 0; }
+  .stock-fila .stock-nombre { font-weight: 500; color: var(--marron); }
+  .stock-fila .stock-meta { font-size: 0.8rem; color: var(--texto-suave); margin-bottom: 0.5rem; }
+  .stock-tallas { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .stock-talla { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 0.72rem; color: var(--texto-suave); }
+  .stock-talla .ctl { display: flex; align-items: center; border: 1px solid var(--crema-oscura); border-radius: 6px; overflow: hidden; background: var(--crema); }
+  .stock-talla .ctl button { border: 0; background: none; width: 24px; height: 30px; cursor: pointer; font-size: 1rem; color: var(--marron); }
+  .stock-talla .ctl button:hover { background: rgba(63,38,1,0.08); }
+  .stock-talla .ctl input { width: 44px; border: 0; background: transparent; text-align: center; font-size: 0.9rem; padding: 4px 0; -moz-appearance: textfield; }
+  .stock-talla .ctl input::-webkit-outer-spin-button, .stock-talla .ctl input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .stock-talla.cero .ctl { border-color: #c0392b; }
+  .stock-talla.bajo .ctl { border-color: #d4a017; }
+  .stock-lado { display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; flex: 0 0 auto; }
+  .badge-stock { font-size: 0.72rem; padding: 3px 10px; border-radius: 20px; background: #e6f4ea; color: #1e6b34; white-space: nowrap; }
+  .badge-stock.bajo { background: #fff3cd; color: #8a6100; }
+  .badge-stock.agotado { background: #fde2e1; color: #a32d2d; }
+  .badge-stock.sin { background: #ececec; color: #666; }
+  .stock-lado button { padding: 0.4rem 0.8rem; font-size: 0.8rem; }
+  .stock-form-wrap { border: 1px dashed var(--crema-oscura); border-radius: var(--radio); padding: 0.8rem; background: var(--crema); }
+  .stock-form-wrap .chk { display: flex; gap: 0.5rem; align-items: center; font-size: 0.88rem; color: var(--marron); cursor: pointer; }
+  .stock-form-wrap .chk input { width: auto; }
+  #mf-stock-campos { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.7rem; }
+  #mf-stock-campos label { display: flex; flex-direction: column; align-items: center; font-size: 0.72rem; gap: 2px; }
+  #mf-stock-campos input { width: 62px; text-align: center; padding: 0.4rem; }
+  @media (max-width: 600px) { .stock-fila { flex-wrap: wrap; } .stock-lado { flex-direction: row; align-items: center; width: 100%; justify-content: space-between; } }
 </style>
 </head>
 <body>
@@ -392,6 +433,7 @@
     <div class="tabs">
       <button class="tab-btn active" data-tab="tab-pedidos">Pedidos</button>
       <button class="tab-btn" data-tab="tab-modelos">Modelos</button>
+      <button class="tab-btn" data-tab="tab-stock">Stock</button>
     </div>
 
     <div id="tab-pedidos" class="tab-panel active">
@@ -462,6 +504,14 @@
               <input type="text" id="mf-tallas" required placeholder="Ej. 35,36,37,38">
             </div>
             <div class="campo full">
+              <label>Stock por talla</label>
+              <div class="stock-form-wrap">
+                <label class="chk"><input type="checkbox" id="mf-stock-activar"> Controlar stock de este modelo</label>
+                <div id="mf-stock-campos"></div>
+                <p class="ayuda-colores" style="margin-top:0.5rem;">Si no activas el control, el modelo siempre aparece disponible. Las tallas salen del campo de arriba.</p>
+              </div>
+            </div>
+            <div class="campo full">
               <label for="mf-descripcion">Descripción</label>
               <textarea id="mf-descripcion" placeholder="Breve descripción del modelo..."></textarea>
             </div>
@@ -500,6 +550,27 @@
 
       <div id="productos-estado-carga" style="text-align:center; padding:2rem; color:var(--texto-suave);">Cargando modelos...</div>
       <div id="productos-grid" class="productos-grid"></div>
+    </div>
+
+    <div id="tab-stock" class="tab-panel">
+      <div class="stock-stats">
+        <div class="stat-card"><div class="valor" id="st-modelos">–</div><div class="etiqueta">Modelos</div></div>
+        <div class="stat-card"><div class="valor" id="st-unidades">–</div><div class="etiqueta">Unidades</div></div>
+        <div class="stat-card"><div class="valor" id="st-bajo">–</div><div class="etiqueta">Stock bajo</div></div>
+        <div class="stat-card"><div class="valor" id="st-agotado">–</div><div class="etiqueta">Agotados</div></div>
+      </div>
+      <div class="stock-toolbar">
+        <input type="text" id="stock-buscar" placeholder="Buscar modelo...">
+        <select id="stock-filtro">
+          <option value="">Todos</option>
+          <option value="bajo">Stock bajo (≤ 3)</option>
+          <option value="agotado">Con tallas agotadas</option>
+          <option value="sin">Sin control</option>
+        </select>
+        <button class="btn-dorado" id="stock-refrescar" style="width:auto; padding:0.6rem 1.2rem;">Actualizar</button>
+      </div>
+      <div id="stock-mensaje" style="font-size:0.85rem; margin-bottom:0.6rem;"></div>
+      <div id="stock-lista"></div>
     </div>
   </main>
 </div>
