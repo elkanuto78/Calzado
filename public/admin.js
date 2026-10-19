@@ -109,10 +109,55 @@
     statTicketPromedio.textContent = formatearMoneda(promedio);
   }
 
+  let filtroEstado = "pendiente";
+  const estadoChips = document.querySelectorAll(".estado-chip");
+  estadoChips.forEach((chip) => {
+    chip.addEventListener("click", () => {
+      filtroEstado = chip.dataset.estado;
+      estadoChips.forEach((c) => c.classList.toggle("active", c === chip));
+      renderizarTabla(pedidosCache);
+    });
+  });
+
+  async function cambiarEstado(id, estado) {
+    try {
+      const resp = await fetch(`/api/pedidos/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-admin-password": getClave() },
+        body: JSON.stringify({ estado }),
+      });
+      if (resp.status === 401) {
+        sessionStorage.removeItem(STORAGE_KEY);
+        mostrarLogin("Sesión expirada. Ingresa de nuevo.");
+        return;
+      }
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.error || "Error del servidor: " + resp.status);
+      const i = pedidosCache.findIndex((p) => p.id === id);
+      if (i >= 0) pedidosCache[i] = data;
+      renderizarTabla(pedidosCache);
+    } catch (err) {
+      alert("No se pudo cambiar el estado: " + err.message);
+    }
+  }
+
+  tbody.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("button[data-estado-nuevo]");
+    if (btn) cambiarEstado(Number(btn.dataset.id), btn.dataset.estadoNuevo);
+  });
+
   function renderizarTabla(pedidos) {
     const filtro = buscarInput.value.trim().toLowerCase();
 
+    const cuenta = { pendiente: 0, recibido: 0 };
+    pedidos.forEach((p) => { cuenta[p.estado === "recibido" ? "recibido" : "pendiente"]++; });
+    document.getElementById("cnt-pendiente").textContent = cuenta.pendiente;
+    document.getElementById("cnt-recibido").textContent = cuenta.recibido;
+    document.getElementById("cnt-todos").textContent = pedidos.length;
+
     const filtrados = pedidos.filter((p) => {
+      const est = p.estado === "recibido" ? "recibido" : "pendiente";
+      if (filtroEstado !== "todos" && est !== filtroEstado) return false;
       if (!filtro) return true;
       const c = p.cliente || {};
       return (
@@ -153,6 +198,13 @@
           </td>
           <td class="items-list">${itemsHtml}</td>
           <td class="total-cell">${formatearMoneda(p.total)}</td>
+          <td>
+            ${p.estado === "recibido"
+              ? `<span class="badge-estado recibido">Recibido</span>
+                 <button type="button" class="btn-estado sec" data-id="${p.id}" data-estado-nuevo="pendiente">Volver a pendiente</button>`
+              : `<span class="badge-estado">Pendiente</span>
+                 <button type="button" class="btn-estado" data-id="${p.id}" data-estado-nuevo="recibido">Marcar recibido</button>`}
+          </td>
         </tr>
       `;
     }).join("");

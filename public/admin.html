@@ -381,6 +381,21 @@
   .producto-card .acciones .btn-borrar:hover { background: rgba(176,42,42,0.06); }
   .producto-card .acciones .btn-editar:hover { background: rgba(201,168,76,0.1); }
 
+  /* ---- Estado de pedidos ---- */
+  .estado-tabs { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
+  .estado-chip {
+    border: 1px solid var(--crema-oscura); background: var(--blanco); color: var(--marron);
+    border-radius: 20px; padding: 0.4rem 1rem; font-size: 0.88rem; cursor: pointer; font-family: var(--fuente-cuerpo);
+  }
+  .estado-chip span { background: var(--crema); border-radius: 10px; padding: 1px 8px; margin-left: 4px; font-size: 0.78rem; }
+  .estado-chip.active { background: var(--marron); color: var(--crema); border-color: var(--marron); }
+  .estado-chip.active span { background: rgba(255,255,255,0.18); }
+  .badge-estado { display: inline-block; font-size: 0.72rem; padding: 3px 10px; border-radius: 20px; background: #fff3cd; color: #8a6100; margin-bottom: 0.4rem; }
+  .badge-estado.recibido { background: #e6f4ea; color: #1e6b34; }
+  .btn-estado { display: block; border: 1px solid var(--dorado); background: none; color: var(--marron); border-radius: 6px; padding: 0.35rem 0.7rem; font-size: 0.78rem; cursor: pointer; font-family: var(--fuente-cuerpo); }
+  .btn-estado:hover { background: var(--dorado); }
+  .btn-estado.sec { border-color: var(--crema-oscura); color: var(--texto-suave); }
+
   /* ---- Stock ---- */
   .stock-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.8rem; margin-bottom: 1.2rem; }
   .stock-stats .stat-card { padding: 0.9rem 1rem; }
@@ -469,6 +484,11 @@
         <button class="btn-dorado" id="btn-refrescar" style="width:auto; padding:0.6rem 1.2rem;">Actualizar</button>
       </div>
 
+      <div class="estado-tabs" id="estado-tabs">
+        <button type="button" class="estado-chip active" data-estado="pendiente">Pendientes <span id="cnt-pendiente">0</span></button>
+        <button type="button" class="estado-chip" data-estado="recibido">Recibidos <span id="cnt-recibido">0</span></button>
+        <button type="button" class="estado-chip" data-estado="todos">Todos <span id="cnt-todos">0</span></button>
+      </div>
       <div class="pedidos-tabla">
         <div id="estado-carga">Cargando pedidos...</div>
         <div id="estado-vacio" style="display:none;">No hay pedidos que coincidan con la búsqueda.</div>
@@ -480,6 +500,7 @@
               <th>Cliente</th>
               <th>Productos</th>
               <th>Total</th>
+              <th>Estado</th>
             </tr>
           </thead>
           <tbody id="tbody-pedidos"></tbody>
