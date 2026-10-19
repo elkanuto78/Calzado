@@ -46,3 +46,9 @@ BEGIN
     CONSTRAINT CK_pedidos_items   CHECK (ISJSON(items) = 1)
   );
 END;
+
+-- Estado del pedido: 'pendiente' (por defecto) o 'recibido'.
+IF COL_LENGTH('pedidos', 'estado') IS NULL
+BEGIN
+  ALTER TABLE pedidos ADD estado NVARCHAR(20) NOT NULL CONSTRAINT DF_pedidos_estado DEFAULT 'pendiente';
+END;

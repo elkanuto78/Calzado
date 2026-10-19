@@ -70,6 +70,9 @@ async function asegurarEsquema() {
   await pool.request().query(
     "IF COL_LENGTH('productos','stock') IS NULL ALTER TABLE productos ADD stock NVARCHAR(MAX) NULL"
   );
+  await pool.request().query(
+    "IF COL_LENGTH('pedidos','estado') IS NULL ALTER TABLE pedidos ADD estado NVARCHAR(20) NOT NULL CONSTRAINT DF_pedidos_estado DEFAULT 'pendiente'"
+  );
 }
 
 function mapearPedido(row) {
@@ -79,6 +82,7 @@ function mapearPedido(row) {
     cliente: JSON.parse(row.cliente),
     items: JSON.parse(row.items),
     total: Number(row.total),
+    estado: row.estado === "recibido" ? "recibido" : "pendiente",
   };
 }
 
@@ -191,6 +195,16 @@ async function eliminarProducto(id) {
     .input("id", sql.Int, id)
     .query("DELETE FROM productos OUTPUT DELETED.* WHERE id = @id");
   return recordset[0] ? mapearProducto(recordset[0]) : null;
+}
+
+async function cambiarEstadoPedido(id, estado) {
+  const pool = await getPool();
+  const { recordset } = await pool
+    .request()
+    .input("id", sql.Int, id)
+    .input("estado", sql.NVarChar(20), estado)
+    .query("UPDATE pedidos SET estado=@estado OUTPUT INSERTED.* WHERE id=@id");
+  return recordset[0] ? mapearPedido(recordset[0]) : null;
 }
 
 async function leerPedidos() {
@@ -427,6 +441,23 @@ const server = http.createServer(async (req, res) => {
       if (ruta === "/pedidos" && method === "GET") {
         if (!esAdmin(req)) return enviarJSON(res, 401, { error: "No autorizado" });
         return enviarJSON(res, 200, await leerPedidos());
+      }
+
+      const matchPedido = ruta.match(/^\/pedidos\/(\d+)$/);
+      if (matchPedido && (method === "PATCH" || method === "PUT")) {
+        if (!esAdmin(req)) return enviarJSON(res, 401, { error: "No autorizado" });
+        let body;
+        try {
+          body = await leerBody(req);
+        } catch (e) {
+          return enviarJSON(res, 400, { error: e.message });
+        }
+        if (body.estado !== "pendiente" && body.estado !== "recibido") {
+          return enviarJSON(res, 400, { error: 'estado debe ser "pendiente" o "recibido"' });
+        }
+        const act = await cambiarEstadoPedido(Number(matchPedido[1]), body.estado);
+        if (!act) return enviarJSON(res, 404, { error: "Pedido no encontrado" });
+        return enviarJSON(res, 200, act);
       }
 
       if (ruta === "/pedidos" && method === "POST") {
