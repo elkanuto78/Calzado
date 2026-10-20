@@ -437,6 +437,16 @@
   .estado-chip.active { background: var(--marron); color: var(--crema); border-color: var(--marron); }
   .estado-chip.active span { background: rgba(255,255,255,0.18); }
 
+  /* ---- QR y visor de voucher ---- */
+  .qr-ajustes { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .qr-caja { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; border: 1px dashed var(--crema-oscura); border-radius: var(--radio); padding: 0.9rem; background: var(--crema); min-width: 190px; }
+  .qr-caja img { width: 160px; height: 160px; object-fit: contain; background: #fff; border-radius: 8px; padding: 6px; }
+  .qr-btn { cursor: pointer; padding: 0.4rem 0.9rem; font-size: 0.82rem; display: inline-block; color: var(--marron); }
+  .qr-btn.peligro { color: #a32d2d; border-color: #e3b5b3; }
+  .visor { position: fixed; inset: 0; background: rgba(20,12,0,0.82); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 1rem; cursor: zoom-out; }
+  .visor[hidden] { display: none; }
+  .visor img { max-width: 100%; max-height: 100%; border-radius: 10px; background: #fff; }
+
   /* ---- Usuarios ---- */
   #us-mensaje { margin-top: 0.7rem; font-size: 0.9rem; }
   #us-mensaje.exito { color: #1e6b34; } #us-mensaje.error { color: #a32d2d; }
@@ -765,12 +775,28 @@
             <span class="ayuda-colores">No pongas claves ni datos de tarjetas. Solo números de cuenta o teléfono de cobro.</span>
           </div>
         </div>
+        <h3 style="margin:1.2rem 0 0.4rem;font-size:1.05rem;color:var(--marron)">Códigos QR de cobro</h3>
+        <p class="ayuda-colores" style="margin:0 0 0.6rem">Se muestran al cliente al pagar. Sube la imagen del QR de tu Yape o Plin (captura desde la app).</p>
+        <div class="qr-ajustes">
+          <div class="qr-caja"><strong>QR Yape</strong>
+            <img id="aj-qr-yape" alt="QR Yape" style="display:none">
+            <label class="btn-secundario qr-btn"><span id="aj-qr-yape-txt">Subir imagen del QR</span><input type="file" id="aj-qr-yape-file" accept="image/*" hidden></label>
+            <button type="button" class="btn-secundario qr-btn peligro" id="aj-qr-yape-quitar" style="display:none">Quitar</button>
+          </div>
+          <div class="qr-caja"><strong>QR Plin</strong>
+            <img id="aj-qr-plin" alt="QR Plin" style="display:none">
+            <label class="btn-secundario qr-btn"><span id="aj-qr-plin-txt">Subir imagen del QR</span><input type="file" id="aj-qr-plin-file" accept="image/*" hidden></label>
+            <button type="button" class="btn-secundario qr-btn peligro" id="aj-qr-plin-quitar" style="display:none">Quitar</button>
+          </div>
+        </div>
         <div class="form-acciones">
           <button type="button" class="btn-dorado" id="aj-guardar">Guardar ajustes</button>
         </div>
         <div id="aj-mensaje"></div>
       </div>
     </div>
+
+    <div class="visor" id="visor" hidden title="Toca para cerrar"><img id="visor-img" alt="Voucher"></div>
 
     <div class="modal-fondo" id="modal-pedido" hidden>
       <div class="modal-caja" id="modal-pedido-caja"></div>

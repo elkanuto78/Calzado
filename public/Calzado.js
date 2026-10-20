@@ -660,6 +660,7 @@ async function mostrarPanelPedido(codigo) {
   const panel = document.getElementById("pedidoPanel");
   panel.innerHTML = '<p class="text-center">Cargando...</p>';
   clearInterval(temporizadorReserva);
+  vouchersPendiente = "";
 
   let seg, cfg;
   try {
@@ -709,6 +710,7 @@ async function mostrarPanelPedido(codigo) {
         <div class="pago-timer">Tiempo para pagar: <strong id="pagoTimer">--:--</strong></div>
         <p class="pago-instr-titulo">Paga S/ ${Number(seg.total).toFixed(2)} y luego informa tu pago:</p>
         <pre class="pago-instr">${escHtml(cfg.instrucciones_pago || "Consulta con la tienda los datos de pago.")}</pre>
+        ${htmlQrPago(cfg.qr)}
         <div class="form-group">
           <label for="pagoMedio">Medio de pago</label>
           <select id="pagoMedio" class="form-control">${cfg.medios.map((m) => `<option>${escHtml(m)}</option>`).join("")}</select>
@@ -716,6 +718,14 @@ async function mostrarPanelPedido(codigo) {
         <div class="form-group">
           <label for="pagoRef">Código de operación</label>
           <input type="text" id="pagoRef" class="form-control" maxlength="40" placeholder="Ej. 123456 (no ingreses datos de tarjeta)">
+        </div>
+        <div class="form-group">
+          <label for="pagoVoucher">Captura de tu pago <small>(recomendado)</small></label>
+          <label class="voucher-drop" id="voucherDrop" for="pagoVoucher">
+            <img id="voucherPreview" alt="" class="hidden">
+            <span id="voucherTexto">📎 Adjuntar captura del voucher</span>
+          </label>
+          <input type="file" id="pagoVoucher" accept="image/*" hidden onchange="elegirVoucher(this)">
         </div>
         <button class="btn btn-gold btn-full" id="btnInformarPago" onclick="informarPago('${escHtml(seg.codigo)}')">Informar mi pago</button>
         <p class="pago-nota">Validamos tu pago manualmente. Si no informas el pago a tiempo, se libera el stock.</p>
@@ -743,6 +753,59 @@ async function mostrarPanelPedido(codigo) {
   }
 }
 
+function htmlQrPago(qr) {
+  const items = [["Yape", qr && qr.yape], ["Plin", qr && qr.plin]].filter((x) => x[1] && /^data:image\//.test(x[1]));
+  if (!items.length) return "";
+  return `<div class="pago-qrs">${items
+    .map(([n, src]) => `<figure><img src="${src}" alt="QR ${n}"><figcaption>Escanea con ${n}</figcaption></figure>`)
+    .join("")}</div>`;
+}
+
+let vouchersPendiente = "";
+
+// Reduce la foto a un JPEG liviano (máx. 1000 px) para subirla rápido desde el celular.
+function comprimirImagen(archivo, maxLado = 1000, calidad = 0.72) {
+  return new Promise((resolve, reject) => {
+    const lector = new FileReader();
+    lector.onerror = () => reject(new Error("No se pudo leer la imagen"));
+    lector.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("El archivo no es una imagen válida"));
+      img.onload = () => {
+        const escala = Math.min(1, maxLado / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width * escala);
+        c.height = Math.round(img.height * escala);
+        const x = c.getContext("2d");
+        x.fillStyle = "#fff";
+        x.fillRect(0, 0, c.width, c.height);
+        x.drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL("image/jpeg", calidad));
+      };
+      img.src = lector.result;
+    };
+    lector.readAsDataURL(archivo);
+  });
+}
+
+async function elegirVoucher(input) {
+  const archivo = input.files && input.files[0];
+  input.value = "";
+  if (!archivo) return;
+  try {
+    let data = await comprimirImagen(archivo);
+    if (data.length > 560000) data = await comprimirImagen(archivo, 800, 0.6);
+    if (data.length > 560000) throw new Error("La imagen es muy pesada. Prueba con otra captura.");
+    vouchersPendiente = data;
+    const prev = document.getElementById("voucherPreview");
+    prev.src = data;
+    prev.classList.remove("hidden");
+    document.getElementById("voucherTexto").textContent = "✓ Captura adjunta (toca para cambiar)";
+  } catch (e) {
+    mostrarToast(e.message, 4000);
+  }
+}
+
 async function informarPago(codigo) {
   const btn = document.getElementById("btnInformarPago");
   const medio = document.getElementById("pagoMedio").value;
@@ -754,10 +817,11 @@ async function informarPago(codigo) {
     const r = await fetch("/api/pedidos/pago", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ codigo, medio, referencia }),
+      body: JSON.stringify({ codigo, medio, referencia, voucher: vouchersPendiente || undefined }),
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(data.error || "No se pudo registrar el pago");
+    vouchersPendiente = "";
     mostrarToast("✓ Pago informado. Lo revisaremos pronto.");
     mostrarPanelPedido(codigo);
   } catch (e) {

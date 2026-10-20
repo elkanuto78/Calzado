@@ -707,6 +707,7 @@
       sessionStorage.removeItem(STORAGE_KEY);
       mostrarLogin(mensaje);
     },
+    comprimirImagen: leerImagenComprimida,
     rol: () => rolActual,
     nombre: () => nombreActual,
   };

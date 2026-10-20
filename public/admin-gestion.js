@@ -187,6 +187,9 @@
           <div>
             ${badge(x.estado)} <strong>${esc(x.medio)}</strong> · ${esc(x.referencia)} · ${A().formatearMoneda(x.monto)}
             <div style="font-size:0.78rem;color:var(--texto-suave)">Informado ${A().formatearFecha(x.fecha)}${x.validado_por ? ` · ${esc(x.validado_por)} ${A().formatearFecha(x.validado_fecha)}` : ""}${x.nota ? ` · ${esc(x.nota)}` : ""}</div>
+            ${x.tiene_voucher
+              ? `<button type="button" class="btn-mini" style="margin-top:6px" data-voucher="${x.id}">📎 Ver voucher</button>`
+              : '<div style="font-size:0.78rem;color:var(--texto-suave)">Sin voucher adjunto</div>'}
             ${x.duplicada ? '<div class="mp-aviso">⚠ Otro pago usa la misma referencia. Revísalo antes de validar.</div>' : ""}
             ${x.estado === "POR_VALIDAR" && Math.abs(x.monto - p.total) > 0.009 ? `<div class="mp-aviso">⚠ El monto (${A().formatearMoneda(x.monto)}) no coincide con el total del pedido.</div>` : ""}
           </div>
@@ -302,6 +305,18 @@
     if (t.closest("[data-cerrar]")) return cerrarModal();
     const p = pedidoAbierto;
     if (!p) return;
+
+    const bVoucher = t.closest("[data-voucher]");
+    if (bVoucher) {
+      try {
+        const r = await api("GET", "/api/pagos/" + bVoucher.dataset.voucher + "/voucher");
+        $("visor-img").src = r.voucher;
+        $("visor").hidden = false;
+      } catch (err) {
+        alert(err.message);
+      }
+      return;
+    }
 
     const bPago = t.closest("[data-pago]");
     if (bPago) {
@@ -426,17 +441,45 @@
   $("rep-aplicar").addEventListener("click", cargarReporte);
 
   // ================================================================ Ajustes
+  let qrActual = { yape: "", plin: "" };
+  function pintarQr() {
+    for (const k of ["yape", "plin"]) {
+      const img = $("aj-qr-" + k);
+      img.src = qrActual[k] || "";
+      img.style.display = qrActual[k] ? "block" : "none";
+      $("aj-qr-" + k + "-quitar").style.display = qrActual[k] ? "inline-block" : "none";
+      $("aj-qr-" + k + "-txt").textContent = qrActual[k] ? "Cambiar imagen" : "Subir imagen del QR";
+    }
+  }
+  for (const k of ["yape", "plin"]) {
+    $("aj-qr-" + k + "-file").addEventListener("change", async (ev) => {
+      const archivo = ev.target.files[0];
+      ev.target.value = "";
+      if (!archivo) return;
+      try {
+        qrActual[k] = await A().comprimirImagen(archivo, 640, 0.9);
+        pintarQr();
+      } catch (err) {
+        alert("No se pudo procesar la imagen: " + err.message);
+      }
+    });
+    $("aj-qr-" + k + "-quitar").addEventListener("click", () => { qrActual[k] = ""; pintarQr(); });
+  }
+  $("visor").addEventListener("click", () => { $("visor").hidden = true; $("visor-img").src = ""; });
+
   async function cargarAjustes() {
     try {
       const cfg = await fetch("/api/config").then((r) => r.json());
       $("aj-minutos").value = cfg.minutos_reserva;
       $("aj-instrucciones").value = cfg.instrucciones_pago || "";
+      qrActual = { yape: (cfg.qr && cfg.qr.yape) || "", plin: (cfg.qr && cfg.qr.plin) || "" };
+      pintarQr();
     } catch (e) {}
   }
   $("aj-guardar").addEventListener("click", async () => {
     const m = $("aj-mensaje");
     try {
-      await api("PUT", "/api/config", { minutos_reserva: $("aj-minutos").value, instrucciones_pago: $("aj-instrucciones").value });
+      await api("PUT", "/api/config", { minutos_reserva: $("aj-minutos").value, instrucciones_pago: $("aj-instrucciones").value, qr_yape: qrActual.yape, qr_plin: qrActual.plin });
       m.textContent = "Ajustes guardados.";
       m.className = "exito";
     } catch (err) {
