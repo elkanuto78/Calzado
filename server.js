@@ -6,6 +6,7 @@ const crypto = require("crypto");
 const { sql, getPool } = require("./db");
 const datos = require("./datos");
 const negocio = require("./negocio");
+const usuarios = require("./usuarios");
 const { enviarConsultaContacto } = require("./mailer");
 
 const PORT = process.env.PORT || 3000;
@@ -192,35 +193,74 @@ function enviarJSON(res, statusCode, data) {
   res.end(JSON.stringify(data, null, 2));
 }
 
-// Roles (RNF-01 / RB-02). Cada rol tiene su propia contraseña en el servidor:
-//   ADMIN_PASSWORD    -> administrador (todo, y es el único que valida pagos)
-//   VENDEDOR_PASSWORD -> vendedor      (opcional: pedidos, stock y catálogo)
-//   GERENTE_PASSWORD  -> gerente       (opcional: solo reportes)
+// Roles (RNF-01 / RB-02). Cuentas:
+//   - "admin": siempre disponible, con la contraseña ADMIN_PASSWORD de Render.
+//   - Usuarios creados por el administrador (tabla usuarios): administrador, vendedor o gerente.
+// El login devuelve un token firmado (12 h) que el panel envía en el header x-admin-password.
+// Por compatibilidad, enviar ADMIN_PASSWORD directamente en ese header también equivale a "admin".
 function igualSeguro(a, b) {
   const x = Buffer.from(String(a));
   const y = Buffer.from(String(b));
   return x.length === y.length && crypto.timingSafeEqual(x, y);
 }
 
-function rolDe(req) {
+const DURACION_TOKEN_MS = 12 * 60 * 60 * 1000;
+function secretoSesion() {
+  return process.env.SESSION_SECRET ||
+    crypto.createHash("sha256").update("cp-sesion:" + (process.env.ADMIN_PASSWORD || "")).digest("hex");
+}
+function firmarToken(payload) {
+  const cuerpo = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const firma = crypto.createHmac("sha256", secretoSesion()).update(cuerpo).digest("base64url");
+  return `${cuerpo}.${firma}`;
+}
+function leerToken(token) {
+  const [cuerpo, firma] = String(token).split(".");
+  if (!cuerpo || !firma) return null;
+  const esperada = crypto.createHmac("sha256", secretoSesion()).update(cuerpo).digest("base64url");
+  if (!igualSeguro(firma, esperada)) return null;
+  try {
+    const p = JSON.parse(Buffer.from(cuerpo, "base64url").toString());
+    return p && p.exp > Date.now() ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+// Caché de usuarios para validar rol y estado activo sin consultar la base en cada petición.
+let usuariosCache = new Map();
+async function refrescarUsuarios() {
+  const filas = await datos.lectura((ctx) => ctx.lista("usuarios", {}));
+  usuariosCache = new Map(filas.map((f) => [f.id, f]));
+}
+function refrescarUsuariosSilencioso() {
+  return refrescarUsuarios().catch((e) => console.error("No se pudo cargar usuarios:", e.message));
+}
+
+const ADMIN_ENV = { id: 0, usuario: "admin", nombre: "Administrador", rol: "administrador" };
+
+function sesionDe(req) {
   const clave = req.headers["x-admin-password"];
   if (!clave) return null;
-  const tabla = [
-    ["administrador", process.env.ADMIN_PASSWORD],
-    ["vendedor", process.env.VENDEDOR_PASSWORD],
-    ["gerente", process.env.GERENTE_PASSWORD],
-  ];
-  for (const [rol, pw] of tabla) if (pw && igualSeguro(clave, pw)) return rol;
-  return null;
+  const adminPw = process.env.ADMIN_PASSWORD;
+  if (adminPw && igualSeguro(clave, adminPw)) return { ...ADMIN_ENV, actor: "admin" };
+  const p = leerToken(clave);
+  if (!p) return null;
+  if (p.id === 0) return adminPw ? { ...ADMIN_ENV, actor: "admin" } : null;
+  const u = usuariosCache.get(p.id);
+  if (!u || !(u.activo === true || u.activo === 1)) return null;
+  return { id: u.id, usuario: u.usuario, nombre: u.nombre, rol: u.rol, actor: `${u.usuario} (${u.rol})` };
 }
 
 // Devuelve el rol si está permitido; si no, responde 401/403 y devuelve null.
 function exigir(req, res, roles) {
-  const rol = rolDe(req);
-  if (!rol) { enviarJSON(res, 401, { error: "No autorizado" }); return null; }
-  if (!roles.includes(rol)) { enviarJSON(res, 403, { error: "Tu rol no tiene permiso para esta acción" }); return null; }
-  return rol;
+  const s = sesionDe(req);
+  if (!s) { enviarJSON(res, 401, { error: "No autorizado" }); return null; }
+  if (!roles.includes(s.rol)) { enviarJSON(res, 403, { error: "Tu rol no tiene permiso para esta acción" }); return null; }
+  req.sesion = s;
+  return s.rol;
 }
+const actorDe = (req) => (req.sesion ? req.sesion.actor : "desconocido");
 
 // Límite simple por IP para los endpoints públicos que escriben datos.
 const intentos = new Map();
@@ -307,7 +347,56 @@ const server = http.createServer(async (req, res) => {
       if (ruta === "/sesion" && method === "GET") {
         const rol = exigir(req, res, ["administrador", "vendedor", "gerente"]);
         if (!rol) return;
-        return enviarJSON(res, 200, { rol });
+        const { usuario, nombre } = req.sesion;
+        return enviarJSON(res, 200, { rol, usuario, nombre });
+      }
+
+      if (ruta === "/login" && method === "POST") {
+        if (limitado(req, 10, 5 * 60 * 1000)) {
+          return enviarJSON(res, 429, { error: "Demasiados intentos. Espera unos minutos e inténtalo de nuevo." });
+        }
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
+        const u = String(body.usuario || "").trim().toLowerCase();
+        const clave = String(body.clave || "");
+        let sesion = null;
+        if (u === "admin") {
+          if (process.env.ADMIN_PASSWORD && igualSeguro(clave, process.env.ADMIN_PASSWORD)) sesion = ADMIN_ENV;
+        } else {
+          const fila = await datos.lectura((ctx) => usuarios.autenticar(ctx, u, clave));
+          if (fila) sesion = { id: fila.id, usuario: fila.usuario, nombre: fila.nombre, rol: fila.rol };
+        }
+        if (!sesion) return enviarJSON(res, 401, { error: "Usuario o contraseña incorrectos." });
+        const token = firmarToken({ id: sesion.id, exp: Date.now() + DURACION_TOKEN_MS });
+        return enviarJSON(res, 200, { token, rol: sesion.rol, usuario: sesion.usuario, nombre: sesion.nombre });
+      }
+
+      // ---- Gestión de usuarios (solo administrador)
+      if (ruta === "/usuarios" && method === "GET") {
+        if (!exigir(req, res, ["administrador"])) return;
+        return enviarJSON(res, 200, await datos.lectura((ctx) => usuarios.listar(ctx)));
+      }
+      if (ruta === "/usuarios" && method === "POST") {
+        if (!exigir(req, res, ["administrador"])) return;
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
+        const nuevo = await T((ctx) => usuarios.crear(ctx, body));
+        await refrescarUsuariosSilencioso();
+        return enviarJSON(res, 201, nuevo);
+      }
+      if ((m = ruta.match(/^\/usuarios\/(\d+)$/)) && method === "PATCH") {
+        if (!exigir(req, res, ["administrador"])) return;
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
+        const act = await T((ctx) => usuarios.actualizar(ctx, Number(m[1]), body, req.sesion.id));
+        await refrescarUsuariosSilencioso();
+        return enviarJSON(res, 200, act);
+      }
+      if ((m = ruta.match(/^\/usuarios\/(\d+)$/)) && method === "DELETE") {
+        if (!exigir(req, res, ["administrador"])) return;
+        const r = await T((ctx) => usuarios.eliminar(ctx, Number(m[1]), req.sesion.id));
+        await refrescarUsuariosSilencioso();
+        return enviarJSON(res, 200, r);
       }
 
       if (ruta === "/config" && method === "GET") {
@@ -428,7 +517,7 @@ const server = http.createServer(async (req, res) => {
         if (!rol) return;
         const body = await leerBodySeguro(req, res);
         if (!body) return;
-        return enviarJSON(res, 201, await T((ctx) => negocio.registrarPago(ctx, Number(m[1]), body, rol)));
+        return enviarJSON(res, 201, await T((ctx) => negocio.registrarPago(ctx, Number(m[1]), body, actorDe(req))));
       }
 
       if ((m = ruta.match(/^\/pagos\/(\d+)$/)) && method === "PATCH") {
@@ -436,7 +525,7 @@ const server = http.createServer(async (req, res) => {
         if (!rol) return;
         const body = await leerBodySeguro(req, res);
         if (!body) return;
-        return enviarJSON(res, 200, await T((ctx) => negocio.resolverPago(ctx, Number(m[1]), body, rol)));
+        return enviarJSON(res, 200, await T((ctx) => negocio.resolverPago(ctx, Number(m[1]), body, actorDe(req))));
       }
 
       if ((m = ruta.match(/^\/pedidos\/(\d+)\/estado$/)) && method === "PATCH") {
@@ -444,7 +533,7 @@ const server = http.createServer(async (req, res) => {
         if (!rol) return;
         const body = await leerBodySeguro(req, res);
         if (!body) return;
-        return enviarJSON(res, 200, await T((ctx) => negocio.cambiarEstado(ctx, Number(m[1]), body.estado, body, rol)));
+        return enviarJSON(res, 200, await T((ctx) => negocio.cambiarEstado(ctx, Number(m[1]), body.estado, body, actorDe(req))));
       }
 
       if ((m = ruta.match(/^\/pedidos\/(\d+)\/comprobante$/)) && method === "PATCH") {
@@ -452,7 +541,7 @@ const server = http.createServer(async (req, res) => {
         if (!rol) return;
         const body = await leerBodySeguro(req, res);
         if (!body) return;
-        return enviarJSON(res, 200, await T((ctx) => negocio.registrarComprobante(ctx, Number(m[1]), body, rol)));
+        return enviarJSON(res, 200, await T((ctx) => negocio.registrarComprobante(ctx, Number(m[1]), body, actorDe(req))));
       }
 
       if ((m = ruta.match(/^\/pedidos\/(\d+)\/entrega$/)) && method === "POST") {
@@ -460,7 +549,7 @@ const server = http.createServer(async (req, res) => {
         if (!rol) return;
         const body = await leerBodySeguro(req, res);
         if (!body) return;
-        return enviarJSON(res, 200, await T((ctx) => negocio.registrarEntrega(ctx, Number(m[1]), body, rol)));
+        return enviarJSON(res, 200, await T((ctx) => negocio.registrarEntrega(ctx, Number(m[1]), body, actorDe(req))));
       }
 
       // ---- Cambios, devoluciones y reclamos
@@ -473,14 +562,14 @@ const server = http.createServer(async (req, res) => {
         if (!rol) return;
         const body = await leerBodySeguro(req, res);
         if (!body) return;
-        return enviarJSON(res, 201, await T((ctx) => negocio.crearReclamo(ctx, body, rol)));
+        return enviarJSON(res, 201, await T((ctx) => negocio.crearReclamo(ctx, body, actorDe(req))));
       }
       if ((m = ruta.match(/^\/reclamos\/(\d+)$/)) && method === "PATCH") {
         const rol = exigir(req, res, PERSONAL);
         if (!rol) return;
         const body = await leerBodySeguro(req, res);
         if (!body) return;
-        return enviarJSON(res, 200, await T((ctx) => negocio.actualizarReclamo(ctx, Number(m[1]), body, rol)));
+        return enviarJSON(res, 200, await T((ctx) => negocio.actualizarReclamo(ctx, Number(m[1]), body, actorDe(req))));
       }
 
       // ---- Reportes (administrador y gerente)
@@ -537,8 +626,10 @@ server.listen(PORT, () => {
   console.log(`Servidor Calzados Paredes corriendo en http://localhost:${PORT}`);
   datos
     .lectura((ctx) => negocio.asegurarEsquema(ctx))
-    .then(() => console.log("Esquema verificado (stock, pagos, reservas, historial, reclamos)"))
+    .then(() => { console.log("Esquema verificado (stock, pagos, reservas, historial, reclamos, usuarios)"); return refrescarUsuariosSilencioso(); })
     .catch((e) => console.error("No se pudo verificar el esquema:", e.message));
+
+  setInterval(refrescarUsuariosSilencioso, 60000).unref();
 
   // Libera las reservas sin pago vencidas (cada minuto).
   setInterval(() => {

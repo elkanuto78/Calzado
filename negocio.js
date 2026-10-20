@@ -640,6 +640,10 @@ async function listarReclamos(ctx) {
 
 // ---------------------------------------------------------------- Esquema
 const ESQUEMA = [
+  "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'usuarios') CREATE TABLE usuarios (" +
+    "id INT IDENTITY(1,1) PRIMARY KEY, usuario NVARCHAR(30) NOT NULL UNIQUE, nombre NVARCHAR(100) NOT NULL, " +
+    "rol NVARCHAR(20) NOT NULL, clave_hash NVARCHAR(300) NOT NULL, activo BIT NOT NULL DEFAULT 1, " +
+    "creado DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())",
   "IF COL_LENGTH('productos','stock') IS NULL ALTER TABLE productos ADD stock NVARCHAR(MAX) NULL",
   "IF COL_LENGTH('pedidos','estado') IS NULL ALTER TABLE pedidos ADD estado NVARCHAR(20) NOT NULL CONSTRAINT DF_pedidos_estado DEFAULT 'PENDIENTE'",
   "IF COL_LENGTH('pedidos','codigo') IS NULL ALTER TABLE pedidos ADD codigo NVARCHAR(20) NULL",
