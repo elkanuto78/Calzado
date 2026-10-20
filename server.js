@@ -7,7 +7,7 @@ const { sql, getPool } = require("./db");
 const datos = require("./datos");
 const negocio = require("./negocio");
 const usuarios = require("./usuarios");
-const { enviarConsultaContacto } = require("./mailer");
+const { enviarConsultaContacto, enviarAvisoPago } = require("./mailer");
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, "public");
@@ -488,11 +488,23 @@ const server = http.createServer(async (req, res) => {
         if (limitado(req, 15, 60000)) return enviarJSON(res, 429, { error: "Demasiadas solicitudes. Intenta en un minuto." });
         const body = await leerBodySeguro(req, res);
         if (!body) return;
+        let pedidoAviso = null;
         const pago = await T(async (ctx) => {
           const fila = await ctx.uno("pedidos", { codigo: String(body.codigo || "").trim().toUpperCase() });
           if (!fila) throw new negocio.ErrorNegocio(404, "No encontramos un pedido con ese código");
+          pedidoAviso = negocio.mapearPedido(fila);
           return negocio.registrarPago(ctx, fila.id, { medio: body.medio, referencia: body.referencia, voucher: body.voucher }, "cliente");
         });
+        // Aviso por correo a la tienda (sin esperar ni afectar la respuesta al cliente).
+        if (pedidoAviso) {
+          const host = req.headers["x-forwarded-host"] || req.headers.host || "";
+          const proto = req.headers["x-forwarded-proto"] || "https";
+          enviarAvisoPago({
+            codigo: pedidoAviso.codigo, cliente: pedidoAviso.cliente, total: pedidoAviso.total,
+            medio: pago.medio, referencia: pago.referencia, tieneVoucher: pago.tiene_voucher,
+            urlPanel: host ? `${proto}://${host}/admin.html` : "/admin.html",
+          }).catch(() => {});
+        }
         return enviarJSON(res, 201, { id: pago.id, estado: pago.estado, medio: pago.medio });
       }
 
@@ -505,6 +517,29 @@ const server = http.createServer(async (req, res) => {
       if (ruta === "/pedidos" && method === "GET") {
         if (!exigir(req, res, PERSONAL)) return;
         return enviarJSON(res, 200, await T((ctx) => negocio.listarPedidos(ctx)));
+      }
+
+      if (ruta === "/pedidos/exportar" && method === "GET") {
+        if (!exigir(req, res, PERSONAL)) return;
+        const desde = url.searchParams.get("desde") || "";
+        const hasta = url.searchParams.get("hasta") || "";
+        for (const f of [desde, hasta]) {
+          if (f && !/^\d{4}-\d{2}-\d{2}$/.test(f)) return enviarJSON(res, 400, { error: "Fechas con formato AAAA-MM-DD" });
+        }
+        const csv = await T((ctx) => negocio.exportarPedidosCsv(ctx, { desde, hasta }));
+        res.writeHead(200, {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": 'attachment; filename="pedidos.csv"',
+          "Access-Control-Allow-Origin": "*",
+        });
+        return res.end(csv);
+      }
+
+      if ((m = ruta.match(/^\/pedidos\/(\d+)\/reserva$/)) && method === "PATCH") {
+        if (!exigir(req, res, PERSONAL)) return;
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
+        return enviarJSON(res, 200, await T((ctx) => negocio.extenderReserva(ctx, Number(m[1]), body.minutos, actorDe(req))));
       }
 
       if ((m = ruta.match(/^\/pedidos\/(\d+)$/)) && method === "GET") {

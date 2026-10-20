@@ -70,4 +70,45 @@ function escaparHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
-module.exports = { enviarConsultaContacto };
+// Avisa a la tienda que un cliente informó un pago por validar. Nunca lanza:
+// si el correo no está configurado o falla, solo lo registra en consola.
+async function enviarAvisoPago({ codigo, cliente, total, medio, referencia, tieneVoucher, urlPanel }) {
+  const t = obtenerTransporter();
+  if (!t) {
+    console.warn("Aviso de pago no enviado: faltan EMAIL_USER / EMAIL_PASS");
+    return;
+  }
+  try {
+    await t.sendMail({
+      from: `"Calzados Paredes - Web" <${process.env.EMAIL_USER}>`,
+      to: DESTINO_CONTACTO,
+      subject: `Pago por validar · ${codigo} · S/ ${Number(total).toFixed(2)}`,
+      text: [
+        `Un cliente informó su pago y está esperando validación.`,
+        ``,
+        `Pedido: ${codigo}`,
+        `Cliente: ${cliente.nombre} (${cliente.telefono || "sin teléfono"})`,
+        `Total: S/ ${Number(total).toFixed(2)}`,
+        `Medio: ${medio}`,
+        `Código de operación: ${referencia}`,
+        `Voucher adjunto: ${tieneVoucher ? "sí" : "no"}`,
+        ``,
+        `Valídalo en el panel: ${urlPanel}`,
+      ].join("\n"),
+      html: `
+        <div style="font-family: sans-serif; font-size: 15px; color: #333;">
+          <h2 style="color:#3f2601;">Pago por validar</h2>
+          <p><strong>Pedido:</strong> ${escaparHtml(codigo)}</p>
+          <p><strong>Cliente:</strong> ${escaparHtml(cliente.nombre)} (${escaparHtml(cliente.telefono || "sin teléfono")})</p>
+          <p><strong>Total:</strong> S/ ${Number(total).toFixed(2)}</p>
+          <p><strong>Medio:</strong> ${escaparHtml(medio)} · <strong>Operación:</strong> ${escaparHtml(referencia)}</p>
+          <p><strong>Voucher adjunto:</strong> ${tieneVoucher ? "sí" : "no"}</p>
+          <p><a href="${escaparHtml(urlPanel)}" style="background:#c9a84c;color:#3f2601;padding:10px 18px;border-radius:6px;text-decoration:none;">Abrir el panel</a></p>
+        </div>`,
+    });
+  } catch (e) {
+    console.error("No se pudo enviar el aviso de pago:", e.message);
+  }
+}
+
+module.exports = { enviarConsultaContacto, enviarAvisoPago };

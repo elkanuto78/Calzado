@@ -377,6 +377,62 @@ function limpiarReferencia(ref) {
   return r;
 }
 
+// Extiende la reserva de un pedido que aún no se pagó (por ejemplo, si el cliente avisó que pagará más tarde).
+async function extenderReserva(ctx, id, minutos, usuario) {
+  const fila = await obtenerPedido(ctx, id);
+  const estado = normalizarEstado(fila.estado);
+  if (estado !== "RESERVADO" || !fila.reserva_vence) {
+    throw new ErrorNegocio(409, "Solo se puede extender la reserva de un pedido reservado y aún sin pago");
+  }
+  const m = parseInt(minutos, 10);
+  if (!Number.isInteger(m) || m < 5 || m > 1440) throw new ErrorNegocio(400, "Los minutos deben estar entre 5 y 1440");
+  const ahoraIso = ahora();
+  const base = String(fila.reserva_vence) > ahoraIso ? String(fila.reserva_vence) : ahoraIso;
+  const nueva = sumarMinutos(base, m);
+  await ctx.actualizar("pedidos", { id: fila.id }, { reserva_vence: nueva });
+  await registrarHistorial(ctx, fila.id, estado, estado, usuario, `Reserva extendida ${m} min (vence ${nueva.replace("T", " ")})`);
+  return { reserva_vence: nueva };
+}
+
+function celdaCsv(v) {
+  let t = v === null || v === undefined ? "" : String(v);
+  if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; // evita fórmulas al abrir en Excel
+  return /[",\n;]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+}
+
+// CSV de pedidos (separado por comas, con BOM para que Excel respete las tildes).
+async function exportarPedidosCsv(ctx, { desde, hasta }) {
+  await vencerReservas(ctx);
+  const fechaDe = (f) => (f instanceof Date ? f.toISOString() : String(f)).slice(0, 10);
+  const filas = (await ctx.lista("pedidos", {}, { orden: "id" })).filter((f) => {
+    const d = fechaDe(f.fecha);
+    return (!desde || d >= desde) && (!hasta || d <= hasta);
+  });
+  const pagos = await ctx.lista("pagos", {}, { orden: "id" });
+  const cab = ["Código", "Fecha", "Estado", "Cliente", "DNI", "Teléfono", "Correo", "Dirección", "Productos", "Total",
+    "Medio de pago", "Operación", "Estado del pago", "Validado por", "Comprobante", "Entrega"];
+  const lineas = [cab.map(celdaCsv).join(",")];
+  for (const f of filas) {
+    const p = mapearPedido(f);
+    const c = p.cliente || {};
+    const mios = pagos.filter((x) => x.pedido_id === f.id);
+    const pg = mios[mios.length - 1] || {};
+    const fecha = f.fecha instanceof Date ? f.fecha.toISOString() : String(f.fecha);
+    lineas.push([
+      p.codigo || "#" + p.id,
+      fecha.slice(0, 16).replace("T", " "),
+      p.estado,
+      c.nombre, c.dni, c.telefono, c.email, c.direccion,
+      p.items.map((i) => `${i.cantidad}x ${i.nombre} (talla ${i.talla}, ${i.color})`).join(" | "),
+      p.total.toFixed(2),
+      pg.medio, pg.referencia, pg.estado, pg.validado_por,
+      p.comprobante ? `${p.comprobante.tipo} ${p.comprobante.numero}` : "",
+      p.entrega ? `${p.entrega.tipo} ${p.entrega.responsable}` : "",
+    ].map(celdaCsv).join(","));
+  }
+  return "\ufeff" + lineas.join("\r\n") + "\r\n";
+}
+
 async function leerVoucher(ctx, pagoId) {
   const v = await ctx.uno("vouchers", { pago_id: pagoId });
   if (!v) throw new ErrorNegocio(404, "Este pago no tiene voucher");
@@ -737,6 +793,6 @@ module.exports = {
   setReloj, ahora, sumarMinutos, mapearPedido,
   leerConfig, guardarConfig, anotarDisponibilidad,
   crearPedido, vencerReservas, listarPedidos, detallePedido, seguimiento,
-  registrarPago, leerVoucher, resolverPago, cambiarEstado, registrarComprobante, registrarEntrega,
+  registrarPago, leerVoucher, extenderReserva, exportarPedidosCsv, resolverPago, cambiarEstado, registrarComprobante, registrarEntrega,
   crearReclamo, actualizarReclamo, listarReclamos, reportes, asegurarEsquema,
 };
