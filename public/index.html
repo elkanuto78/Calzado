@@ -63,7 +63,11 @@
       </div>
       <div class="row sort-wrap">
         <div class="col-xs-12">
-          <label for="sortSelect">Ordenar por:</label>
+          <label for="tallaSelect" style="margin-left:14px">Talla:</label>
+          <select id="tallaSelect" class="sort-select" onchange="filtrarTalla(this.value)">
+            <option value="">Todas</option>
+          </select>
+          <label for="sortSelect" style="margin-left:14px">Ordenar por:</label>
           <select id="sortSelect" class="sort-select" onchange="sortProducts()">
             <option value="default">Destacados</option>
             <option value="precio-asc">Precio: Menor a Mayor</option>
@@ -231,6 +235,7 @@
             <li><a href="#modelos">Modelos</a></li>
             <li><a href="#nosotros">Nosotros</a></li>
             <li><a href="#contacto">Contacto</a></li>
+            <li><a href="#" onclick="abrirSeguimiento(); return false;">Seguir mi pedido</a></li>
           </ul>
         </div>
         <div class="col-md-3 col-sm-6 footer-contact">
@@ -252,14 +257,19 @@
     <div class="modal-card" id="checkoutCard" style="max-width:480px">
       <button class="modal-close" onclick="cerrarCheckout()">&times;</button>
       <div style="padding:2rem">
-        <h2 style="margin:0 0 0.3rem;font-family:'Cormorant Garamond',serif;font-size:1.6rem">Datos del cliente</h2>
-        <p style="margin:0 0 1.5rem;color:#888;font-size:.9rem">Completa tu información para finalizar el pedido</p>
+        <h2 id="checkoutTitulo" style="margin:0 0 0.3rem;font-family:'Cormorant Garamond',serif;font-size:1.6rem">Datos del cliente</h2>
+        <p id="checkoutSub" style="margin:0 0 1.5rem;color:#888;font-size:.9rem">Completa tu información para finalizar el pedido</p>
 
         <div id="checkoutForm">
           <div class="form-group">
             <label for="ckNombre">Nombre completo *</label>
             <input type="text" id="ckNombre" class="form-control" placeholder="Tu nombre completo">
             <span class="field-error" id="ckNombreErr"></span>
+          </div>
+          <div class="form-group">
+            <label for="ckDni">DNI *</label>
+            <input type="text" id="ckDni" class="form-control" inputmode="numeric" maxlength="8" placeholder="8 dígitos">
+            <span class="field-error" id="ckDniErr"></span>
           </div>
           <div class="form-group">
             <label for="ckTelefono">Teléfono / WhatsApp *</label>
@@ -280,18 +290,18 @@
             <label for="ckNota">Nota adicional</label>
             <textarea id="ckNota" class="form-control" rows="2" placeholder="Referencias, instrucciones especiales..."></textarea>
           </div>
-          <button class="btn btn-gold btn-full" style="margin-top:.5rem" onclick="enviarPedido()">Confirmar pedido</button>
+          <p style="font-size:.8rem;color:#888;margin:.2rem 0 .8rem">Al confirmar, reservamos tu stock y podrás informar tu pago (Yape, Plin o transferencia). Usamos tu DNI y teléfono solo para gestionar el pedido.</p>
+          <button class="btn btn-gold btn-full" id="btnConfirmarPedido" style="margin-top:.5rem" onclick="enviarPedido()">Confirmar pedido</button>
         </div>
 
-        <div id="checkoutSuccess" class="form-success hidden text-center">
-          <div class="success-icon">&#10003;</div>
-          <h3>¡Pedido registrado!</h3>
-          <p id="checkoutSuccessMsg"></p>
+        <div id="checkoutSuccess" class="hidden">
+          <div id="pedidoPanel"></div>
         </div>
       </div>
     </div>
   </div>
 
+  <button class="pedido-chip hidden" id="pedidoChip" onclick="abrirSeguimiento()">Mi pedido <span id="pedidoChipCodigo"></span></button>
   <div class="toast" id="toast"></div>
   <button class="back-to-top" id="backToTop" onclick="scrollToTop()" title="Volver arriba">&#8679;</button>
 

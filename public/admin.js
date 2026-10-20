@@ -34,19 +34,6 @@
   const btnLogin = document.getElementById("btn-login");
   const loginError = document.getElementById("login-error");
   const btnLogout = document.getElementById("btn-logout");
-  const btnRefrescar = document.getElementById("btn-refrescar");
-  const buscarInput = document.getElementById("buscar-input");
-
-  const estadoCarga = document.getElementById("estado-carga");
-  const estadoVacio = document.getElementById("estado-vacio");
-  const tabla = document.getElementById("tabla-pedidos");
-  const tbody = document.getElementById("tbody-pedidos");
-
-  const statTotalPedidos = document.getElementById("stat-total-pedidos");
-  const statTotalVentas = document.getElementById("stat-total-ventas");
-  const statTicketPromedio = document.getElementById("stat-ticket-promedio");
-
-  let pedidosCache = [];
 
   function formatearMoneda(valor) {
     return "S/ " + Number(valor).toFixed(2);
@@ -70,151 +57,13 @@
     return sessionStorage.getItem(STORAGE_KEY);
   }
 
-  async function cargarPedidos() {
-    const clave = getClave();
-    if (!clave) return mostrarLogin();
-
-    estadoCarga.style.display = "block";
-    estadoVacio.style.display = "none";
-    tabla.style.display = "none";
-
-    try {
-      const resp = await fetch("/api/pedidos", {
-        headers: { "x-admin-password": clave },
-      });
-
-      if (resp.status === 401) {
-        sessionStorage.removeItem(STORAGE_KEY);
-        mostrarLogin("Sesión expirada o contraseña incorrecta. Ingresa de nuevo.");
-        return;
-      }
-
-      if (!resp.ok) throw new Error("Error del servidor: " + resp.status);
-
-      const pedidos = await resp.json();
-      pedidosCache = Array.isArray(pedidos) ? pedidos : [];
-      renderizarStats(pedidosCache);
-      renderizarTabla(pedidosCache);
-    } catch (err) {
-      estadoCarga.textContent = "No se pudo cargar el historial: " + err.message;
-    }
-  }
-
-  function renderizarStats(pedidos) {
-    const totalVentas = pedidos.reduce((sum, p) => sum + Number(p.total || 0), 0);
-    const promedio = pedidos.length ? totalVentas / pedidos.length : 0;
-
-    statTotalPedidos.textContent = pedidos.length;
-    statTotalVentas.textContent = formatearMoneda(totalVentas);
-    statTicketPromedio.textContent = formatearMoneda(promedio);
-  }
-
-  let filtroEstado = "pendiente";
-  const estadoChips = document.querySelectorAll(".estado-chip");
-  estadoChips.forEach((chip) => {
-    chip.addEventListener("click", () => {
-      filtroEstado = chip.dataset.estado;
-      estadoChips.forEach((c) => c.classList.toggle("active", c === chip));
-      renderizarTabla(pedidosCache);
-    });
-  });
-
-  async function cambiarEstado(id, estado) {
-    try {
-      const resp = await fetch(`/api/pedidos/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-admin-password": getClave() },
-        body: JSON.stringify({ estado }),
-      });
-      if (resp.status === 401) {
-        sessionStorage.removeItem(STORAGE_KEY);
-        mostrarLogin("Sesión expirada. Ingresa de nuevo.");
-        return;
-      }
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(data.error || "Error del servidor: " + resp.status);
-      const i = pedidosCache.findIndex((p) => p.id === id);
-      if (i >= 0) pedidosCache[i] = data;
-      renderizarTabla(pedidosCache);
-    } catch (err) {
-      alert("No se pudo cambiar el estado: " + err.message);
-    }
-  }
-
-  tbody.addEventListener("click", (ev) => {
-    const btn = ev.target.closest("button[data-estado-nuevo]");
-    if (btn) cambiarEstado(Number(btn.dataset.id), btn.dataset.estadoNuevo);
-  });
-
-  function renderizarTabla(pedidos) {
-    const filtro = buscarInput.value.trim().toLowerCase();
-
-    const cuenta = { pendiente: 0, recibido: 0 };
-    pedidos.forEach((p) => { cuenta[p.estado === "recibido" ? "recibido" : "pendiente"]++; });
-    document.getElementById("cnt-pendiente").textContent = cuenta.pendiente;
-    document.getElementById("cnt-recibido").textContent = cuenta.recibido;
-    document.getElementById("cnt-todos").textContent = pedidos.length;
-
-    const filtrados = pedidos.filter((p) => {
-      const est = p.estado === "recibido" ? "recibido" : "pendiente";
-      if (filtroEstado !== "todos" && est !== filtroEstado) return false;
-      if (!filtro) return true;
-      const c = p.cliente || {};
-      return (
-        (c.nombre || "").toLowerCase().includes(filtro) ||
-        (c.email || "").toLowerCase().includes(filtro) ||
-        (c.telefono || "").toLowerCase().includes(filtro)
-      );
-    });
-
-    estadoCarga.style.display = "none";
-
-    if (filtrados.length === 0) {
-      estadoVacio.style.display = "block";
-      tabla.style.display = "none";
-      return;
-    }
-
-    estadoVacio.style.display = "none";
-    tabla.style.display = "table";
-
-    const ordenados = [...filtrados].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-
-    tbody.innerHTML = ordenados.map((p) => {
-      const c = p.cliente || {};
-      const items = Array.isArray(p.items) ? p.items : [];
-      const itemsHtml = items
-        .map((it) => `<div>${it.cantidad}× ${escaparHtml(it.nombre)} (talla ${escaparHtml(String(it.talla))}, ${escaparHtml(it.color)})</div>`)
-        .join("");
-
-      return `
-        <tr>
-          <td>#${p.id}</td>
-          <td>${formatearFecha(p.fecha)}</td>
-          <td>
-            <div class="cliente-nombre">${escaparHtml(c.nombre || "—")}</div>
-            <div class="cliente-detalle">${escaparHtml(c.telefono || "")}</div>
-            <div class="cliente-detalle">${escaparHtml(c.email || "")}</div>
-          </td>
-          <td class="items-list">${itemsHtml}</td>
-          <td class="total-cell">${formatearMoneda(p.total)}</td>
-          <td>
-            ${p.estado === "recibido"
-              ? `<span class="badge-estado recibido">Recibido</span>
-                 <button type="button" class="btn-estado sec" data-id="${p.id}" data-estado-nuevo="pendiente">Volver a pendiente</button>`
-              : `<span class="badge-estado">Pendiente</span>
-                 <button type="button" class="btn-estado" data-id="${p.id}" data-estado-nuevo="recibido">Marcar recibido</button>`}
-          </td>
-        </tr>
-      `;
-    }).join("");
-  }
-
   function escaparHtml(str) {
     const div = document.createElement("div");
     div.textContent = str == null ? "" : String(str);
     return div.innerHTML;
   }
+
+  let rolActual = null;
 
   function mostrarLogin(mensaje) {
     loginScreen.style.display = "flex";
@@ -224,10 +73,34 @@
     passwordInput.focus();
   }
 
-  function mostrarDashboard() {
+  const ETIQUETA_ROL = { administrador: "Administrador", vendedor: "Vendedor", gerente: "Gerente" };
+
+  function aplicarRol(rol) {
+    rolActual = rol;
+    document.body.dataset.rol = rol;
+    document.getElementById("rol-actual").textContent = ETIQUETA_ROL[rol] || rol;
+    document.querySelectorAll("[data-roles]").forEach((el) => {
+      const visible = el.dataset.roles.split(",").includes(rol);
+      el.style.display = visible ? "" : "none";
+      el.dataset.oculto = visible ? "" : "1";
+    });
+    const primero = [...document.querySelectorAll(".tab-btn")].find((b) => !b.dataset.oculto);
+    if (primero) primero.click();
+  }
+
+  function mostrarDashboard(rol) {
     loginScreen.style.display = "none";
     dashboard.style.display = "block";
-    cargarPedidos();
+    aplicarRol(rol);
+    document.dispatchEvent(new CustomEvent("admin:listo", { detail: { rol } }));
+  }
+
+  // Devuelve el rol de la clave o null si es incorrecta.
+  async function verificarSesion(clave) {
+    const resp = await fetch("/api/sesion", { headers: { "x-admin-password": clave } });
+    if (resp.status === 401 || resp.status === 403) return null;
+    if (!resp.ok) throw new Error("Error del servidor: " + resp.status);
+    return (await resp.json()).rol;
   }
 
   btnLogin.addEventListener("click", async () => {
@@ -238,19 +111,14 @@
     btnLogin.disabled = true;
 
     try {
-      const resp = await fetch("/api/pedidos", {
-        headers: { "x-admin-password": clave },
-      });
-
-      if (resp.status === 401) {
+      const rol = await verificarSesion(clave);
+      if (!rol) {
         loginError.textContent = "Contraseña incorrecta.";
-        btnLogin.disabled = false;
         return;
       }
-      if (!resp.ok) throw new Error("Error del servidor: " + resp.status);
-
       sessionStorage.setItem(STORAGE_KEY, clave);
-      mostrarDashboard();
+      loginError.textContent = "";
+      mostrarDashboard(rol);
     } catch (err) {
       loginError.textContent = "No se pudo verificar: " + err.message;
     } finally {
@@ -266,9 +134,6 @@
     sessionStorage.removeItem(STORAGE_KEY);
     mostrarLogin();
   });
-
-  btnRefrescar.addEventListener("click", cargarPedidos);
-  buscarInput.addEventListener("input", () => renderizarTabla(pedidosCache));
 
   // ==================================================================
   // Tabs
@@ -286,6 +151,7 @@
         cargarProductos();
       }
       if (btn.dataset.tab === "tab-stock") cargarProductos();
+      document.dispatchEvent(new CustomEvent("admin:tab", { detail: btn.dataset.tab }));
     });
   });
 
@@ -814,8 +680,29 @@
   document.getElementById("stock-refrescar").addEventListener("click", cargarProductos);
 
   // Al cargar la página: si ya hay clave guardada en esta pestaña, entra directo
+  window.AdminCtx = {
+    getClave,
+    escaparHtml,
+    formatearMoneda,
+    formatearFecha,
+    mostrarLogin,
+    cerrarSesion(mensaje) {
+      sessionStorage.removeItem(STORAGE_KEY);
+      mostrarLogin(mensaje);
+    },
+    rol: () => rolActual,
+  };
+
   if (getClave()) {
-    mostrarDashboard();
+    verificarSesion(getClave())
+      .then((rol) => {
+        if (rol) mostrarDashboard(rol);
+        else {
+          sessionStorage.removeItem(STORAGE_KEY);
+          mostrarLogin();
+        }
+      })
+      .catch(() => mostrarLogin("No se pudo conectar con el servidor."));
   } else {
     mostrarLogin();
   }

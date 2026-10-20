@@ -1389,3 +1389,28 @@ img { max-width: 100%; display: block; }
 }
 .size-btn.agotada:hover { border-color: var(--crema-oscura); }
 .btn:disabled, .btn-gold:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ---- Pedido, pago y seguimiento ---- */
+.pedido-chip {
+  position: fixed; left: 16px; bottom: 16px; z-index: 2500;
+  background: var(--marron); color: var(--dorado); border: 0; border-radius: 30px;
+  padding: 10px 18px; font-family: var(--fuente-cuerpo); font-size: 13px; cursor: pointer;
+  box-shadow: var(--sombra);
+}
+.pedido-chip span { color: var(--crema); margin-left: 4px; }
+.pedido-cabecera { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.pedido-codigo { font-family: var(--fuente-titulo); font-size: 1.7rem; color: var(--marron); letter-spacing: .04em; }
+.pedido-estado { font-size: 12px; padding: 4px 12px; border-radius: 20px; background: #fff3cd; color: #8a6100; }
+.pedido-estado.est-PAGO_VALIDADO, .pedido-estado.est-EN_PREPARACION, .pedido-estado.est-ENTREGADO { background: #e6f4ea; color: #1e6b34; }
+.pedido-estado.est-CANCELADO { background: #fde2e1; color: #a32d2d; }
+.pedido-detalle { color: var(--texto-suave); font-size: .92rem; margin: 4px 0 10px; }
+.pedido-alerta { background: #fde2e1; color: #a32d2d; border-radius: 8px; padding: 8px 12px; font-size: .88rem; }
+.pedido-items { list-style: none; padding: 0; margin: 0 0 8px; font-size: .92rem; }
+.pedido-items li { padding: 4px 0; border-bottom: 1px solid var(--crema-oscura); }
+.pedido-total { text-align: right; margin: 6px 0 12px; }
+.pago-caja { background: var(--crema); border: 1px dashed var(--dorado); border-radius: 12px; padding: 14px; }
+.pago-timer { font-size: .9rem; color: var(--marron); margin-bottom: 6px; }
+.pago-timer strong { font-size: 1.2rem; color: #a32d2d; }
+.pago-instr-titulo { font-weight: 500; margin: 6px 0; }
+.pago-instr { white-space: pre-wrap; background: var(--blanco); border: 1px solid var(--crema-oscura); border-radius: 8px; padding: 10px; font-family: var(--fuente-cuerpo); font-size: .9rem; color: var(--texto); }
+.pago-nota { font-size: .78rem; color: var(--texto-suave); margin: 8px 0 0; }

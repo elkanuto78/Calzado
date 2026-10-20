@@ -2,6 +2,7 @@ let PRODUCTOS = [];
 
 let estado = {
   filtroCategoria: "todos",
+  filtroTalla: "",
   textoBusqueda: "",
   ordenamiento: "default",
   vistaActual: "grid",
@@ -18,9 +19,15 @@ document.addEventListener("DOMContentLoaded", () => {
     .then((r) => r.json())
     .then((data) => {
       PRODUCTOS = data.productos;
+      llenarTallas();
       renderProductos();
     })
     .catch(() => mostrarToast("Error al cargar los productos"));
+
+  try {
+    const guardado = localStorage.getItem("cp_pedido");
+    if (guardado) mostrarChipPedido(guardado);
+  } catch (e) {}
 
   iniciarScrollEvents();
   iniciarAnimacionEstadisticas();
@@ -29,9 +36,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // ---- Stock ----
 // producto.stock = { talla: unidades } o null (sin control => siempre disponible)
+// producto.disponible = unidades que se pueden pedir ahora (stock − reservas)
 function stockDeTalla(p, talla) {
   if (!p || !p.stock) return Infinity;
-  const n = Number(p.stock[String(talla)]);
+  const fuente = p.disponible || p.stock; // disponible = stock físico − reservas activas
+  const n = Number(fuente[String(talla)]);
   return Number.isFinite(n) ? n : 0;
 }
 
@@ -50,6 +59,7 @@ function recargarProductos() {
     .then((r) => r.json())
     .then((data) => {
       PRODUCTOS = data.productos;
+      llenarTallas();
       renderProductos();
     })
     .catch(() => {});
@@ -92,8 +102,31 @@ function setView(vista) {
   }
 }
 
+function llenarTallas() {
+  const sel = document.getElementById("tallaSelect");
+  if (!sel) return;
+  const actual = sel.value;
+  const tallas = [...new Set(PRODUCTOS.flatMap((p) => (p.tallas || []).map(String)))].sort(
+    (a, b) => Number(a) - Number(b) || a.localeCompare(b)
+  );
+  sel.innerHTML = '<option value="">Todas</option>' + tallas.map((t) => `<option value="${t}">${t}</option>`).join("");
+  sel.value = tallas.includes(actual) ? actual : "";
+  estado.filtroTalla = sel.value;
+}
+
+function filtrarTalla(valor) {
+  estado.filtroTalla = valor;
+  renderProductos();
+}
+
 function renderProductos() {
   let lista = [...PRODUCTOS];
+
+  if (estado.filtroTalla) {
+    lista = lista.filter(
+      (p) => (p.tallas || []).map(String).includes(estado.filtroTalla) && stockDeTalla(p, estado.filtroTalla) > 0
+    );
+  }
 
   if (estado.filtroCategoria !== "todos") {
     lista = lista.filter((p) => p.tipo === estado.filtroCategoria);
@@ -434,11 +467,15 @@ function checkout() {
 
   document.getElementById("checkoutForm").classList.remove("hidden");
   document.getElementById("checkoutSuccess").classList.add("hidden");
-  ["ckNombre", "ckTelefono", "ckEmail", "ckDireccion", "ckNota"].forEach((id) => {
+  document.getElementById("checkoutTitulo").textContent = "Datos del cliente";
+  document.getElementById("checkoutSub").textContent = "Completa tu información para finalizar el pedido";
+  const btnConf = document.getElementById("btnConfirmarPedido");
+  if (btnConf) { btnConf.disabled = false; btnConf.textContent = "Confirmar pedido"; }
+  ["ckNombre", "ckDni", "ckTelefono", "ckEmail", "ckDireccion", "ckNota"].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
-  ["ckNombreErr", "ckTelefonoErr", "ckEmailErr", "ckDireccionErr"].forEach((id) => {
+  ["ckNombreErr", "ckDniErr", "ckTelefonoErr", "ckEmailErr", "ckDireccionErr"].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.textContent = "";
   });
@@ -448,6 +485,7 @@ function checkout() {
 
 function cerrarCheckout(event) {
   if (event && event.target !== document.getElementById("checkoutOverlay")) return;
+  clearInterval(temporizadorReserva);
   document.getElementById("checkoutOverlay").classList.remove("open");
   document.body.style.overflow = "";
 }
@@ -466,6 +504,14 @@ function enviarPedido() {
     valido = false;
   } else {
     document.getElementById("ckNombreErr").textContent = "";
+  }
+
+  const dni = document.getElementById("ckDni");
+  if (!/^\d{8}$/.test(dni.value.trim())) {
+    document.getElementById("ckDniErr").textContent = "El DNI debe tener 8 dígitos.";
+    valido = false;
+  } else {
+    document.getElementById("ckDniErr").textContent = "";
   }
 
   if (telefono.value.trim().length < 7) {
@@ -496,6 +542,7 @@ function enviarPedido() {
   const pedido = {
     cliente: {
       nombre:    nombre.value.trim(),
+      dni:       dni.value.trim(),
       telefono:  telefono.value.trim(),
       email:     email.value.trim(),
       direccion: direccion.value.trim(),
@@ -512,6 +559,12 @@ function enviarPedido() {
     })),
     total: parseFloat(total.toFixed(2)),
   };
+
+  // RNF-02: evita duplicar el pedido si se toca el botón varias veces.
+  const btn = document.getElementById("btnConfirmarPedido");
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = "Registrando...";
 
   fetch("/api/pedidos", {
     method: "POST",
@@ -532,22 +585,186 @@ function enviarPedido() {
       recargarProductos();
       estado.carrito = [];
       actualizarCarritoUI();
-      document.getElementById("checkoutForm").classList.add("hidden");
-      document.getElementById("checkoutSuccess").classList.remove("hidden");
-      document.getElementById("checkoutSuccessMsg").textContent =
-        `Pedido #${data.id} registrado. Total: S/ ${total.toFixed(2)}. Nos contactaremos contigo pronto.`;
+      try { localStorage.setItem("cp_pedido", data.codigo); } catch (e) {}
+      mostrarChipPedido(data.codigo);
+      mostrarPanelPedido(data.codigo);
     })
     .catch((err) => {
+      btn.disabled = false;
+      btn.textContent = "Confirmar pedido";
       if (err.status === 409 && Array.isArray(err.detalle)) {
         const lista = err.detalle
           .map((d) => `${d.nombre} (talla ${d.talla}): ${d.disponible > 0 ? "quedan " + d.disponible : "agotado"}`)
           .join(" · ");
         mostrarToast("⚠ Sin stock suficiente — " + lista + ". Ajusta tu carrito.", 7000);
         recargarProductos();
+      } else if (err.status) {
+        mostrarToast(err.message, 5000);
       } else {
-        mostrarToast("Error al registrar el pedido. Intenta de nuevo.");
+        mostrarToast("Sin conexión. Revisa tu internet e intenta de nuevo (tu pedido no se duplicó).");
       }
     });
+}
+
+// ---------------------------------------------------------------- Seguimiento y pago
+const ETAPAS_PEDIDO = {
+  RESERVADO: ["Reservado", "Reservamos tus productos. Falta informar tu pago."],
+  PAGO_VALIDADO: ["Pago confirmado", "Recibimos tu pago. Pronto prepararemos tu pedido."],
+  EN_PREPARACION: ["En preparación", "Estamos preparando tu pedido."],
+  ENTREGADO: ["Entregado", "Tu pedido fue entregado. ¡Gracias por tu compra!"],
+  CANCELADO: ["Cancelado", "La reserva venció o el pedido fue cancelado."],
+  PENDIENTE: ["Pendiente", "Registramos tu pedido."],
+};
+
+let temporizadorReserva = null;
+
+function ahoraLimaMs() {
+  const p = {};
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Lima", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  }).formatToParts(new Date()).forEach(({ type, value }) => (p[type] = value));
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour === "24" ? 0 : p.hour, p.minute, p.second);
+}
+
+function mostrarChipPedido(codigo) {
+  const chip = document.getElementById("pedidoChip");
+  if (!chip) return;
+  document.getElementById("pedidoChipCodigo").textContent = codigo;
+  chip.classList.remove("hidden");
+}
+
+function abrirSeguimiento() {
+  let codigo = "";
+  try { codigo = localStorage.getItem("cp_pedido") || ""; } catch (e) {}
+  if (!codigo) {
+    codigo = (prompt("Ingresa el código de tu pedido (ej. CP-AB12CD):") || "").trim();
+    if (!codigo) return;
+  }
+  mostrarPanelPedido(codigo);
+}
+
+function escHtml(t) {
+  const d = document.createElement("div");
+  d.textContent = t == null ? "" : String(t);
+  return d.innerHTML;
+}
+
+async function mostrarPanelPedido(codigo) {
+  document.getElementById("checkoutForm").classList.add("hidden");
+  document.getElementById("checkoutSuccess").classList.remove("hidden");
+  document.getElementById("checkoutOverlay").classList.add("open");
+  document.body.style.overflow = "hidden";
+  document.getElementById("checkoutTitulo").textContent = "Tu pedido";
+  document.getElementById("checkoutSub").textContent = "";
+  const panel = document.getElementById("pedidoPanel");
+  panel.innerHTML = '<p class="text-center">Cargando...</p>';
+  clearInterval(temporizadorReserva);
+
+  let seg, cfg;
+  try {
+    const rs = await fetch("/api/seguimiento?codigo=" + encodeURIComponent(codigo));
+    seg = await rs.json();
+    if (!rs.ok) {
+      panel.innerHTML = `<p class="text-center">${escHtml(seg.error || "No se pudo consultar el pedido")}</p>`;
+      try { if (rs.status === 404) localStorage.removeItem("cp_pedido"); } catch (e) {}
+      const chip = document.getElementById("pedidoChip");
+      if (chip && rs.status === 404) chip.classList.add("hidden");
+      return;
+    }
+    cfg = await (await fetch("/api/config")).json();
+  } catch (e) {
+    panel.innerHTML = '<p class="text-center">No se pudo conectar. Intenta de nuevo.</p>';
+    return;
+  }
+
+  const [titulo, detalle] = ETAPAS_PEDIDO[seg.estado] || [seg.estado, ""];
+  const enRevision = seg.pagos.some((p) => p.estado === "POR_VALIDAR");
+  const rechazado = !enRevision && seg.pagos.length && seg.pagos[seg.pagos.length - 1].estado === "RECHAZADO";
+  const necesitaPago = seg.estado === "RESERVADO" && !enRevision;
+
+  const items = seg.items
+    .map((i) => `<li>${i.cantidad}× ${escHtml(i.nombre)} <small>(talla ${escHtml(i.talla)}, ${escHtml(i.color)})</small></li>`)
+    .join("");
+
+  let html = `
+    <div class="pedido-cabecera">
+      <div class="pedido-codigo">${escHtml(seg.codigo)}</div>
+      <span class="pedido-estado est-${seg.estado}">${escHtml(titulo)}</span>
+    </div>
+    <p class="pedido-detalle">${escHtml(detalle)}${enRevision ? " Tu pago está en revisión: te confirmaremos pronto." : ""}</p>
+    <ul class="pedido-items">${items}</ul>
+    <p class="pedido-total">Total: <strong>S/ ${Number(seg.total).toFixed(2)}</strong></p>`;
+
+  if (seg.comprobante) {
+    html += `<p class="pedido-detalle">Comprobante: ${escHtml(seg.comprobante.tipo)} ${escHtml(seg.comprobante.numero)}</p>`;
+  }
+  if (rechazado && seg.estado === "RESERVADO") {
+    html += '<p class="pedido-alerta">Tu último pago fue rechazado. Revisa el código de operación e inténtalo de nuevo.</p>';
+  }
+
+  if (necesitaPago) {
+    html += `
+      <div class="pago-caja">
+        <div class="pago-timer">Tiempo para pagar: <strong id="pagoTimer">--:--</strong></div>
+        <p class="pago-instr-titulo">Paga S/ ${Number(seg.total).toFixed(2)} y luego informa tu pago:</p>
+        <pre class="pago-instr">${escHtml(cfg.instrucciones_pago || "Consulta con la tienda los datos de pago.")}</pre>
+        <div class="form-group">
+          <label for="pagoMedio">Medio de pago</label>
+          <select id="pagoMedio" class="form-control">${cfg.medios.map((m) => `<option>${escHtml(m)}</option>`).join("")}</select>
+        </div>
+        <div class="form-group">
+          <label for="pagoRef">Código de operación</label>
+          <input type="text" id="pagoRef" class="form-control" maxlength="40" placeholder="Ej. 123456 (no ingreses datos de tarjeta)">
+        </div>
+        <button class="btn btn-gold btn-full" id="btnInformarPago" onclick="informarPago('${escHtml(seg.codigo)}')">Informar mi pago</button>
+        <p class="pago-nota">Validamos tu pago manualmente. Si no informas el pago a tiempo, se libera el stock.</p>
+      </div>`;
+  } else if (seg.estado === "RESERVADO" && enRevision) {
+    html += '<p class="pago-nota">Cuando validemos tu pago verás aquí el cambio de estado. Puedes volver con tu código desde "Mi pedido".</p>';
+  }
+
+  html += '<button class="btn btn-outline btn-full" style="margin-top:.8rem" onclick="cerrarCheckout()">Cerrar</button>';
+  panel.innerHTML = html;
+
+  if (necesitaPago && seg.reserva_vence) {
+    const vence = Date.parse(seg.reserva_vence + "Z");
+    const pintar = () => {
+      const el = document.getElementById("pagoTimer");
+      if (!el) return clearInterval(temporizadorReserva);
+      const rest = Math.max(0, vence - ahoraLimaMs());
+      const mm = String(Math.floor(rest / 60000)).padStart(2, "0");
+      const ss = String(Math.floor((rest % 60000) / 1000)).padStart(2, "0");
+      el.textContent = `${mm}:${ss}`;
+      if (rest === 0) { clearInterval(temporizadorReserva); mostrarPanelPedido(seg.codigo); }
+    };
+    pintar();
+    temporizadorReserva = setInterval(pintar, 1000);
+  }
+}
+
+async function informarPago(codigo) {
+  const btn = document.getElementById("btnInformarPago");
+  const medio = document.getElementById("pagoMedio").value;
+  const referencia = document.getElementById("pagoRef").value.trim();
+  if (referencia.length < 3) { mostrarToast("Ingresa el código de operación de tu pago"); return; }
+  btn.disabled = true;
+  btn.textContent = "Enviando...";
+  try {
+    const r = await fetch("/api/pedidos/pago", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ codigo, medio, referencia }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || "No se pudo registrar el pago");
+    mostrarToast("✓ Pago informado. Lo revisaremos pronto.");
+    mostrarPanelPedido(codigo);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = "Informar mi pago";
+    mostrarToast(e.message, 5000);
+  }
 }
 
 function validateField(field) {
@@ -752,6 +969,9 @@ function resetFilters() {
   estado.filtroCategoria = "todos";
   estado.textoBusqueda = "";
   estado.ordenamiento = "default";
+  estado.filtroTalla = "";
+  const selTalla = document.getElementById("tallaSelect");
+  if (selTalla) selTalla.value = "";
   document.getElementById("searchInput").value = "";
   document.getElementById("sortSelect").value = "default";
   document.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
