@@ -64,6 +64,8 @@
   }
 
   let rolActual = null;
+  let nombreActual = "";
+  const usuarioInput = document.getElementById("usuario-input");
 
   function mostrarLogin(mensaje) {
     loginScreen.style.display = "flex";
@@ -78,7 +80,7 @@
   function aplicarRol(rol) {
     rolActual = rol;
     document.body.dataset.rol = rol;
-    document.getElementById("rol-actual").textContent = ETIQUETA_ROL[rol] || rol;
+    document.getElementById("rol-actual").textContent = (nombreActual && nombreActual !== (ETIQUETA_ROL[rol] || rol) ? nombreActual + " · " : "") + (ETIQUETA_ROL[rol] || rol);
     document.querySelectorAll("[data-roles]").forEach((el) => {
       const visible = el.dataset.roles.split(",").includes(rol);
       el.style.display = visible ? "" : "none";
@@ -88,7 +90,8 @@
     if (primero) primero.click();
   }
 
-  function mostrarDashboard(rol) {
+  function mostrarDashboard(rol, nombre) {
+    nombreActual = nombre || "";
     loginScreen.style.display = "none";
     dashboard.style.display = "block";
     aplicarRol(rol);
@@ -100,30 +103,44 @@
     const resp = await fetch("/api/sesion", { headers: { "x-admin-password": clave } });
     if (resp.status === 401 || resp.status === 403) return null;
     if (!resp.ok) throw new Error("Error del servidor: " + resp.status);
-    return (await resp.json()).rol;
+    return resp.json();
   }
 
   btnLogin.addEventListener("click", async () => {
-    const clave = passwordInput.value.trim();
-    if (!clave) return;
+    const usuario = usuarioInput.value.trim();
+    const clave = passwordInput.value;
+    if (!usuario || !clave) {
+      loginError.textContent = "Ingresa usuario y contraseña.";
+      return;
+    }
 
     loginError.textContent = "Verificando...";
     btnLogin.disabled = true;
 
     try {
-      const rol = await verificarSesion(clave);
-      if (!rol) {
-        loginError.textContent = "Contraseña incorrecta.";
+      const resp = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ usuario, clave }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        loginError.textContent = data.error || "No se pudo iniciar sesión.";
         return;
       }
-      sessionStorage.setItem(STORAGE_KEY, clave);
+      sessionStorage.setItem(STORAGE_KEY, data.token);
       loginError.textContent = "";
-      mostrarDashboard(rol);
+      passwordInput.value = "";
+      mostrarDashboard(data.rol, data.nombre);
     } catch (err) {
       loginError.textContent = "No se pudo verificar: " + err.message;
     } finally {
       btnLogin.disabled = false;
     }
+  });
+
+  usuarioInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") passwordInput.focus();
   });
 
   passwordInput.addEventListener("keydown", (e) => {
@@ -691,12 +708,13 @@
       mostrarLogin(mensaje);
     },
     rol: () => rolActual,
+    nombre: () => nombreActual,
   };
 
   if (getClave()) {
     verificarSesion(getClave())
-      .then((rol) => {
-        if (rol) mostrarDashboard(rol);
+      .then((ses) => {
+        if (ses) mostrarDashboard(ses.rol, ses.nombre);
         else {
           sessionStorage.removeItem(STORAGE_KEY);
           mostrarLogin();

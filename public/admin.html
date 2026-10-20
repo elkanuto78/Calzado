@@ -437,6 +437,23 @@
   .estado-chip.active { background: var(--marron); color: var(--crema); border-color: var(--marron); }
   .estado-chip.active span { background: rgba(255,255,255,0.18); }
 
+  /* ---- Usuarios ---- */
+  #us-mensaje { margin-top: 0.7rem; font-size: 0.9rem; }
+  #us-mensaje.exito { color: #1e6b34; } #us-mensaje.error { color: #a32d2d; }
+  .us-fila { display: flex; gap: 1rem; align-items: center; background: var(--blanco); border-radius: var(--radio); box-shadow: var(--sombra); padding: 0.8rem 1rem; margin-bottom: 0.7rem; flex-wrap: wrap; }
+  .us-fila .us-datos { flex: 1; min-width: 180px; }
+  .us-fila .us-nombre { font-weight: 500; color: var(--marron); }
+  .us-fila .us-sub { font-size: 0.8rem; color: var(--texto-suave); }
+  .us-fila.inactivo { opacity: 0.6; }
+  .us-rol { font-size: 0.72rem; padding: 3px 10px; border-radius: 20px; background: var(--crema); color: var(--marron); border: 1px solid var(--crema-oscura); }
+  .us-rol.administrador { background: var(--marron); color: var(--crema); border-color: var(--marron); }
+  .us-estado { font-size: 0.72rem; padding: 3px 10px; border-radius: 20px; background: #e6f4ea; color: #1e6b34; }
+  .us-estado.off { background: #fde2e1; color: #a32d2d; }
+  .us-acciones { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+  .us-acciones button { padding: 0.4rem 0.8rem; font-size: 0.8rem; border: 1px solid var(--crema-oscura); background: none; color: var(--marron); border-radius: 6px; cursor: pointer; font-family: var(--fuente-cuerpo); }
+  .us-acciones button:hover { background: var(--crema); }
+  .us-acciones .peligro { color: #a32d2d; border-color: #e3b5b3; }
+
   /* ---- Stock ---- */
   .stock-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.8rem; margin-bottom: 1.2rem; }
   .stock-stats .stat-card { padding: 0.9rem 1rem; }
@@ -485,6 +502,7 @@
   <div class="login-box">
     <h1>Panel Admin</h1>
     <p>Calzados Paredes — Historial de ventas</p>
+    <input type="text" id="usuario-input" placeholder="Usuario" autocomplete="username" autocapitalize="none" spellcheck="false" style="margin-bottom:0.6rem">
     <input type="password" id="password-input" placeholder="Contraseña" autocomplete="current-password">
     <button id="btn-login">Ingresar</button>
     <div id="login-error"></div>
@@ -519,6 +537,7 @@
       <button class="tab-btn" data-tab="tab-stock" data-roles="administrador,vendedor">Stock</button>
       <button class="tab-btn" data-tab="tab-reclamos" data-roles="administrador,vendedor">Cambios y reclamos</button>
       <button class="tab-btn" data-tab="tab-reportes" data-roles="administrador,gerente">Reportes</button>
+      <button class="tab-btn" data-tab="tab-usuarios" data-roles="administrador">Usuarios</button>
       <button class="tab-btn" data-tab="tab-ajustes" data-roles="administrador">Ajustes</button>
     </div>
 
@@ -696,6 +715,42 @@
       <div id="rep-contenido"></div>
     </div>
 
+    <div id="tab-usuarios" class="tab-panel" data-roles="administrador">
+      <div class="modelo-form">
+        <h2 id="us-form-titulo">Nuevo usuario</h2>
+        <form id="us-form" autocomplete="off">
+          <div class="form-grid">
+            <div class="campo">
+              <label for="us-nombre">Nombre completo *</label>
+              <input type="text" id="us-nombre" maxlength="100" placeholder="Ej. María Pérez" required>
+            </div>
+            <div class="campo">
+              <label for="us-usuario">Usuario *</label>
+              <input type="text" id="us-usuario" maxlength="30" placeholder="Ej. mperez" autocapitalize="none" spellcheck="false" required>
+            </div>
+            <div class="campo">
+              <label for="us-rol">Rol *</label>
+              <select id="us-rol">
+                <option value="vendedor">Vendedor (pedidos y stock)</option>
+                <option value="gerente">Gerente (solo reportes)</option>
+                <option value="administrador">Administrador (todo)</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label for="us-clave" id="us-clave-label">Contraseña * (mín. 8 caracteres)</label>
+              <input type="password" id="us-clave" minlength="8" maxlength="100" autocomplete="new-password">
+            </div>
+          </div>
+          <div class="form-acciones">
+            <button type="submit" class="btn-dorado" id="us-guardar">Crear usuario</button>
+            <button type="button" class="btn-secundario" id="us-cancelar" style="display:none;">Cancelar edición</button>
+          </div>
+          <div id="us-mensaje"></div>
+        </form>
+      </div>
+      <div id="us-lista"></div>
+    </div>
+
     <div id="tab-ajustes" class="tab-panel" data-roles="administrador">
       <div class="modelo-form">
         <h2>Ajustes de la tienda</h2>
@@ -725,5 +780,6 @@
 
 <script src="admin.js"></script>
 <script src="admin-gestion.js"></script>
+<script src="admin-usuarios.js"></script>
 </body>
 </html>
