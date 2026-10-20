@@ -437,6 +437,16 @@
   .estado-chip.active { background: var(--marron); color: var(--crema); border-color: var(--marron); }
   .estado-chip.active span { background: rgba(255,255,255,0.18); }
 
+  /* ---- Exportar, WhatsApp, imprimir ---- */
+  .export-fila { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; font-size: 0.85rem; color: var(--texto-suave); margin-bottom: 0.9rem; }
+  .export-fila label { display: flex; gap: 0.3rem; align-items: center; }
+  .export-fila input { padding: 0.35rem 0.5rem; border: 1px solid var(--crema-oscura); border-radius: 6px; font-family: var(--fuente-cuerpo); background: var(--blanco); }
+  .export-fila .btn-secundario { padding: 0.4rem 0.9rem; font-size: 0.82rem; cursor: pointer; }
+  .btn-wa { display: inline-block; background: #25d366; color: #fff !important; border-radius: 6px; padding: 0.35rem 0.8rem; font-size: 0.8rem; text-decoration: none; font-family: var(--fuente-cuerpo); }
+  .btn-wa:hover { background: #1ebe5b; }
+  .btn-wa.mini { padding: 0.25rem 0.55rem; margin-left: 4px; }
+  .mp-herramientas { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.4rem 0 0.2rem; }
+
   /* ---- QR y visor de voucher ---- */
   .qr-ajustes { display: flex; gap: 1rem; flex-wrap: wrap; }
   .qr-caja { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; border: 1px dashed var(--crema-oscura); border-radius: var(--radio); padding: 0.9rem; background: var(--crema); min-width: 190px; }
@@ -555,6 +565,12 @@
       <div class="toolbar">
         <input type="text" id="buscar-input" placeholder="Buscar por código, nombre, DNI o teléfono...">
         <button class="btn-dorado" id="btn-refrescar" style="width:auto; padding:0.6rem 1.2rem;">Actualizar</button>
+      </div>
+      <div class="export-fila">
+        <span>Exportar a Excel (CSV):</span>
+        <label>Desde <input type="date" id="ex-desde"></label>
+        <label>Hasta <input type="date" id="ex-hasta"></label>
+        <button type="button" class="btn-secundario" id="ex-boton">⬇ Descargar pedidos</button>
       </div>
 
       <div class="estado-tabs" id="estado-tabs">

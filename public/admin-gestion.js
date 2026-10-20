@@ -51,6 +51,81 @@
     return data;
   }
 
+  // ---- WhatsApp (abre el chat con el mensaje armado; no usa ninguna API)
+  function telefonoWa(t) {
+    const d = String(t || "").replace(/\D/g, "");
+    if (d.length === 9) return "51" + d;
+    return d.length >= 10 ? d : "";
+  }
+  function mensajeWa(p) {
+    const c = p.cliente || {};
+    const nombre = String(c.nombre || "").split(" ")[0] || "";
+    const cod = p.codigo || "#" + p.id;
+    const total = A().formatearMoneda(p.total);
+    const hola = `Hola ${nombre}, te escribimos de Calzados Paredes.`;
+    const enRevision = (p.pagos || []).some((x) => x.estado === "POR_VALIDAR");
+    const estados = {
+      PENDIENTE: `${hola} Recibimos tu pedido ${cod} (${total}).`,
+      RESERVADO: enRevision
+        ? `${hola} Recibimos tu pago del pedido ${cod} (${total}) y lo estamos validando. Te confirmamos en breve.`
+        : `${hola} Tu pedido ${cod} (${total}) está reservado. Para confirmarlo, realiza tu pago e infórmalo en nuestra web con tu código.`,
+      PAGO_VALIDADO: `${hola} ¡Tu pago del pedido ${cod} fue confirmado! Pronto lo prepararemos.`,
+      EN_PREPARACION: `${hola} Estamos preparando tu pedido ${cod}. Te avisaremos cuando esté listo.`,
+      ENTREGADO: `${hola} Tu pedido ${cod} fue entregado. ¡Gracias por tu compra!`,
+      CANCELADO: `${hola} Tu pedido ${cod} fue cancelado porque la reserva venció. Si aún lo deseas, puedes hacer un nuevo pedido en nuestra web.`,
+    };
+    return estados[p.estado] || `${hola} Sobre tu pedido ${cod}:`;
+  }
+  function enlaceWa(p) {
+    const tel = telefonoWa((p.cliente || {}).telefono);
+    return tel ? `https://wa.me/${tel}?text=${encodeURIComponent(mensajeWa(p))}` : "";
+  }
+
+  // ---- Orden imprimible (para taller / despacho)
+  function imprimirOrden(p) {
+    const c = p.cliente || {};
+    const filas = (p.items || []).map((it) =>
+      `<tr><td>${esc(it.cantidad)}</td><td>${esc(it.nombre)}</td><td>${esc(String(it.talla))}</td><td>${esc(it.color)}</td><td style="text-align:right">${A().formatearMoneda(it.subtotal)}</td></tr>`).join("");
+    const w = window.open("", "_blank", "width=800,height=900");
+    if (!w) return alert("Permite las ventanas emergentes para imprimir.");
+    w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Orden ${esc(p.codigo || p.id)}</title>
+      <style>body{font-family:Arial,sans-serif;color:#222;margin:24px}h1{font-size:20px;margin:0}h2{font-size:14px;margin:18px 0 6px;border-bottom:1px solid #999}
+      table{width:100%;border-collapse:collapse;font-size:13px}th,td{border-bottom:1px solid #ddd;padding:6px;text-align:left}
+      .meta{font-size:13px;line-height:1.6}.firma{margin-top:50px;display:flex;gap:40px}.firma div{flex:1;border-top:1px solid #333;padding-top:4px;font-size:12px;text-align:center}</style></head><body>
+      <h1>Calzados Paredes — Orden de despacho</h1>
+      <p class="meta"><strong>Pedido:</strong> ${esc(p.codigo || "#" + p.id)} &nbsp; <strong>Fecha:</strong> ${esc(A().formatearFecha(p.fecha))} &nbsp; <strong>Estado:</strong> ${esc(ETIQUETA_ESTADO[p.estado] || p.estado)}</p>
+      <h2>Cliente</h2>
+      <p class="meta"><strong>${esc(c.nombre || "")}</strong><br>DNI: ${esc(c.dni || "—")} · Tel.: ${esc(c.telefono || "—")}<br>Dirección: ${esc(c.direccion || "—")}${c.nota ? `<br>Nota: ${esc(c.nota)}` : ""}</p>
+      <h2>Productos</h2>
+      <table><tr><th>Cant.</th><th>Modelo</th><th>Talla</th><th>Color</th><th style="text-align:right">Subtotal</th></tr>${filas}</table>
+      <p style="text-align:right;font-size:15px"><strong>Total ${A().formatearMoneda(p.total)}</strong></p>
+      <div class="firma"><div>Preparado por</div><div>Recibí conforme</div></div>
+      <script>window.onload=function(){window.print();}<\/script></body></html>`);
+    w.document.close();
+  }
+
+  // ---- Exportar pedidos a CSV (Excel)
+  $("ex-boton").addEventListener("click", async () => {
+    const qs = new URLSearchParams();
+    if ($("ex-desde").value) qs.set("desde", $("ex-desde").value);
+    if ($("ex-hasta").value) qs.set("hasta", $("ex-hasta").value);
+    try {
+      const resp = await fetch("/api/pedidos/exportar?" + qs.toString(), { headers: { "x-admin-password": A().getClave() } });
+      if (resp.status === 401) return A().cerrarSesion("Sesión expirada. Ingresa de nuevo.");
+      if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).error || "Error del servidor: " + resp.status);
+      const blob = await resp.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "pedidos" + (qs.get("desde") ? "_" + qs.get("desde") : "") + (qs.get("hasta") ? "_a_" + qs.get("hasta") : "") + ".csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    } catch (err) {
+      alert("No se pudo exportar: " + err.message);
+    }
+  });
+
   // ================================================================ Pedidos
   let pedidos = [];
   let filtroEstado = "por_validar";
@@ -115,7 +190,7 @@
           <td class="items-list">${items}</td>
           <td class="total-cell">${A().formatearMoneda(p.total)}</td>
           <td>${badge(p.estado)}${pago}</td>
-          <td><button type="button" class="btn-mini" data-gestionar="${p.id}">Gestionar</button></td>
+          <td><button type="button" class="btn-mini" data-gestionar="${p.id}">Gestionar</button>${enlaceWa(p) ? ` <a class="btn-wa mini" target="_blank" rel="noopener" href="${enlaceWa(p)}" title="Escribir por WhatsApp">💬</a>` : ""}</td>
         </tr>`;
     }).join("");
   }
@@ -212,7 +287,7 @@
     let acciones = "";
     if (p.estado === "PAGO_VALIDADO") acciones += '<button type="button" class="btn-mini" data-estado="EN_PREPARACION">Autorizar despacho (pasar a preparación)</button> ';
     if (["PENDIENTE", "RESERVADO"].includes(p.estado) && !hayPorValidar) acciones += '<button type="button" class="btn-mini peligro" data-estado="CANCELADO">Cancelar pedido</button>';
-    if (p.estado === "RESERVADO" && p.reserva_vence && !hayPorValidar) acciones += ` <span style="font-size:0.8rem;color:var(--texto-suave)">La reserva vence ${A().formatearFecha(p.reserva_vence)}</span>`;
+    if (p.estado === "RESERVADO" && p.reserva_vence && !hayPorValidar) acciones += ` <button type="button" class="btn-mini sec" data-extender="1">⏱ Extender reserva</button> <span style="font-size:0.8rem;color:var(--texto-suave)">La reserva vence ${A().formatearFecha(p.reserva_vence)}</span>`;
 
     const compr = CONFIRMADOS.includes(p.estado) ? `
       <div class="mp-seccion">
@@ -259,6 +334,10 @@
     caja.innerHTML = `
       <button class="modal-cerrar" data-cerrar>&times;</button>
       <div class="mp-titulo"><h2>${esc(p.codigo || "Pedido #" + p.id)}</h2>${badge(p.estado)}<span style="color:var(--texto-suave);font-size:0.85rem">${A().formatearFecha(p.fecha)}</span></div>
+      <div class="mp-herramientas">
+        ${enlaceWa(p) ? `<a class="btn-wa" target="_blank" rel="noopener" href="${enlaceWa(p)}">💬 Escribir por WhatsApp</a>` : '<span style="font-size:0.8rem;color:var(--texto-suave)">Sin teléfono válido para WhatsApp</span>'}
+        <button type="button" class="btn-mini sec" data-imprimir="1">🖨 Imprimir orden</button>
+      </div>
       <div class="mp-seccion">
         <h3>Cliente</h3>
         <div class="mp-datos">
@@ -305,6 +384,13 @@
     if (t.closest("[data-cerrar]")) return cerrarModal();
     const p = pedidoAbierto;
     if (!p) return;
+
+    if (t.closest("[data-imprimir]")) return imprimirOrden(p);
+    if (t.closest("[data-extender]")) {
+      const txt = prompt("¿Cuántos minutos extender la reserva? (5 a 1440)", "60");
+      if (txt === null) return;
+      return accionPedido(() => api("PATCH", `/api/pedidos/${p.id}/reserva`, { minutos: Number(txt) }));
+    }
 
     const bVoucher = t.closest("[data-voucher]");
     if (bVoucher) {
