@@ -2,7 +2,10 @@ require("dotenv").config();
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { sql, getPool } = require("./db");
+const datos = require("./datos");
+const negocio = require("./negocio");
 const { enviarConsultaContacto } = require("./mailer");
 
 const PORT = process.env.PORT || 3000;
@@ -64,28 +67,6 @@ function sanearStock(stock, tallas) {
   return limpio;
 }
 
-// Crea la columna stock si todavía no existe (migración automática).
-async function asegurarEsquema() {
-  const pool = await getPool();
-  await pool.request().query(
-    "IF COL_LENGTH('productos','stock') IS NULL ALTER TABLE productos ADD stock NVARCHAR(MAX) NULL"
-  );
-  await pool.request().query(
-    "IF COL_LENGTH('pedidos','estado') IS NULL ALTER TABLE pedidos ADD estado NVARCHAR(20) NOT NULL CONSTRAINT DF_pedidos_estado DEFAULT 'pendiente'"
-  );
-}
-
-function mapearPedido(row) {
-  return {
-    id: row.id,
-    fecha: row.fecha,
-    cliente: JSON.parse(row.cliente),
-    items: JSON.parse(row.items),
-    total: Number(row.total),
-    estado: row.estado === "recibido" ? "recibido" : "pendiente",
-  };
-}
-
 async function leerProductos({ tipo, tag, minPrecio, maxPrecio } = {}) {
   const pool = await getPool();
   const request = pool.request();
@@ -98,7 +79,13 @@ async function leerProductos({ tipo, tag, minPrecio, maxPrecio } = {}) {
 
   const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const { recordset } = await request.query(`SELECT * FROM productos ${whereClause} ORDER BY id`);
-  return recordset.map(mapearProducto);
+  const productos = recordset.map(mapearProducto);
+  try {
+    return await datos.lectura((ctx) => negocio.anotarDisponibilidad(ctx, productos));
+  } catch (e) {
+    console.error("No se pudo calcular la disponibilidad:", e.message);
+    return productos.map((p) => ({ ...p, reservado: {}, disponible: p.stock ? { ...p.stock } : null }));
+  }
 }
 
 async function obtenerProducto(id) {
@@ -197,98 +184,6 @@ async function eliminarProducto(id) {
   return recordset[0] ? mapearProducto(recordset[0]) : null;
 }
 
-async function cambiarEstadoPedido(id, estado) {
-  const pool = await getPool();
-  const { recordset } = await pool
-    .request()
-    .input("id", sql.Int, id)
-    .input("estado", sql.NVarChar(20), estado)
-    .query("UPDATE pedidos SET estado=@estado OUTPUT INSERTED.* WHERE id=@id");
-  return recordset[0] ? mapearPedido(recordset[0]) : null;
-}
-
-async function leerPedidos() {
-  const pool = await getPool();
-  const { recordset } = await pool.request().query("SELECT * FROM pedidos ORDER BY id");
-  return recordset.map(mapearPedido);
-}
-
-// Devuelve la fecha/hora actual como texto en horario de Lima (UTC-5, sin
-// horario de verano), independiente de en qué zona horaria esté el servidor
-// donde corre Node (Render corre en UTC).
-function obtenerFechaLima() {
-  const partes = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Lima",
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-    hour12: false,
-  }).formatToParts(new Date());
-  const obj = {};
-  partes.forEach(({ type, value }) => (obj[type] = value));
-  return `${obj.year}-${obj.month}-${obj.day}T${obj.hour}:${obj.minute}:${obj.second}`;
-}
-
-async function crearPedido({ cliente, items, total }) {
-  const pool = await getPool();
-  const tx = new sql.Transaction(pool);
-  await tx.begin();
-  try {
-    // Unidades pedidas por producto y talla (sumando todos los colores).
-    const pedido = {};
-    for (const it of Array.isArray(items) ? items : []) {
-      const id = Number(it.id);
-      const cant = Math.floor(Number(it.cantidad)) || 0;
-      if (!Number.isInteger(id) || cant <= 0) continue;
-      const t = String(it.talla);
-      pedido[id] = pedido[id] || {};
-      pedido[id][t] = (pedido[id][t] || 0) + cant;
-    }
-
-    const faltantes = [];
-    const nuevos = {};
-    for (const id of Object.keys(pedido).map(Number).sort((a, b) => a - b)) {
-      const { recordset } = await new sql.Request(tx)
-        .input("id", sql.Int, id)
-        .query("SELECT id, nombre, stock FROM productos WITH (UPDLOCK, ROWLOCK) WHERE id = @id");
-      if (!recordset[0]) continue;
-      const stock = parsearStock(recordset[0].stock);
-      if (!stock) continue; // sin control de stock
-      for (const [talla, cant] of Object.entries(pedido[id])) {
-        const disp = Number(stock[talla]) || 0;
-        if (cant > disp) faltantes.push({ id, nombre: recordset[0].nombre, talla, disponible: disp });
-        else stock[talla] = disp - cant;
-      }
-      nuevos[id] = stock;
-    }
-
-    if (faltantes.length) {
-      await tx.rollback();
-      return { faltantes };
-    }
-
-    for (const [id, stock] of Object.entries(nuevos)) {
-      await new sql.Request(tx)
-        .input("id", sql.Int, Number(id))
-        .input("stock", sql.NVarChar(sql.MAX), JSON.stringify(stock))
-        .query("UPDATE productos SET stock=@stock WHERE id=@id");
-    }
-
-    const { recordset } = await new sql.Request(tx)
-      .input("fecha", sql.VarChar(30), obtenerFechaLima())
-      .input("cliente", sql.NVarChar(sql.MAX), JSON.stringify(cliente))
-      .input("items", sql.NVarChar(sql.MAX), JSON.stringify(items))
-      .input("total", sql.Decimal(10, 2), Number(total))
-      .query(`INSERT INTO pedidos (fecha, cliente, items, total)
-              OUTPUT INSERTED.*
-              VALUES (CAST(@fecha AS DATETIME2), @cliente, @items, @total)`);
-    await tx.commit();
-    return { pedido: mapearPedido(recordset[0]) };
-  } catch (e) {
-    try { await tx.rollback(); } catch {}
-    throw e;
-  }
-}
-
 function enviarJSON(res, statusCode, data) {
   res.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
@@ -297,13 +192,50 @@ function enviarJSON(res, statusCode, data) {
   res.end(JSON.stringify(data, null, 2));
 }
 
-// Compara la contraseña enviada en el header x-admin-password contra la
-// configurada en el servidor. Se usa para proteger todas las rutas que
-// crean, editan o borran datos (productos y pedidos).
-function esAdmin(req) {
-  const claveAdmin = req.headers["x-admin-password"];
-  return Boolean(process.env.ADMIN_PASSWORD) && claveAdmin === process.env.ADMIN_PASSWORD;
+// Roles (RNF-01 / RB-02). Cada rol tiene su propia contraseña en el servidor:
+//   ADMIN_PASSWORD    -> administrador (todo, y es el único que valida pagos)
+//   VENDEDOR_PASSWORD -> vendedor      (opcional: pedidos, stock y catálogo)
+//   GERENTE_PASSWORD  -> gerente       (opcional: solo reportes)
+function igualSeguro(a, b) {
+  const x = Buffer.from(String(a));
+  const y = Buffer.from(String(b));
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
 }
+
+function rolDe(req) {
+  const clave = req.headers["x-admin-password"];
+  if (!clave) return null;
+  const tabla = [
+    ["administrador", process.env.ADMIN_PASSWORD],
+    ["vendedor", process.env.VENDEDOR_PASSWORD],
+    ["gerente", process.env.GERENTE_PASSWORD],
+  ];
+  for (const [rol, pw] of tabla) if (pw && igualSeguro(clave, pw)) return rol;
+  return null;
+}
+
+// Devuelve el rol si está permitido; si no, responde 401/403 y devuelve null.
+function exigir(req, res, roles) {
+  const rol = rolDe(req);
+  if (!rol) { enviarJSON(res, 401, { error: "No autorizado" }); return null; }
+  if (!roles.includes(rol)) { enviarJSON(res, 403, { error: "Tu rol no tiene permiso para esta acción" }); return null; }
+  return rol;
+}
+
+// Límite simple por IP para los endpoints públicos que escriben datos.
+const intentos = new Map();
+function limitado(req, max, ventanaMs) {
+  const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+  const ahora = Date.now();
+  const lista = (intentos.get(ip) || []).filter((t) => ahora - t < ventanaMs);
+  lista.push(ahora);
+  intentos.set(ip, lista);
+  return lista.length > max;
+}
+setInterval(() => {
+  const ahora = Date.now();
+  for (const [ip, l] of intentos) if (!l.some((t) => ahora - t < 60000)) intentos.delete(ip);
+}, 300000).unref();
 
 function servirArchivo(res, filePath) {
   fs.readFile(filePath, (err, data) => {
@@ -343,6 +275,13 @@ function leerBody(req) {
   });
 }
 
+function leerBodySeguro(req, res) {
+  return leerBody(req).catch((e) => {
+    enviarJSON(res, 400, { error: e.message });
+    return null;
+  });
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const pathname = url.pathname;
@@ -360,9 +299,32 @@ const server = http.createServer(async (req, res) => {
   try {
     if (pathname.startsWith("/api/")) {
       const ruta = pathname.slice(4);
+      const T = datos.transaccion;
+      const PERSONAL = ["administrador", "vendedor"];
+      let m;
+
+      // ---- Sesión y configuración
+      if (ruta === "/sesion" && method === "GET") {
+        const rol = exigir(req, res, ["administrador", "vendedor", "gerente"]);
+        if (!rol) return;
+        return enviarJSON(res, 200, { rol });
+      }
+
+      if (ruta === "/config" && method === "GET") {
+        return enviarJSON(res, 200, await datos.lectura((ctx) => negocio.leerConfig(ctx)));
+      }
+      if (ruta === "/config" && method === "PUT") {
+        if (!exigir(req, res, ["administrador"])) return;
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
+        return enviarJSON(res, 200, await T((ctx) => negocio.guardarConfig(ctx, body)));
+      }
+
+      // ---- Productos
       const matchId = ruta.match(/^\/productos\/(\d+)$/);
 
       if (ruta === "/productos" && method === "GET") {
+        await T((ctx) => negocio.vencerReservas(ctx)).catch((e) => console.error("Vencimiento de reservas:", e.message));
         const tipo = url.searchParams.get("tipo");
         const tag = url.searchParams.get("tag");
         const minPrecio = parseFloat(url.searchParams.get("min_precio"));
@@ -378,29 +340,20 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (ruta === "/productos" && method === "POST") {
-        if (!esAdmin(req)) return enviarJSON(res, 401, { error: "No autorizado" });
-        let body;
-        try {
-          body = await leerBody(req);
-        } catch (e) {
-          return enviarJSON(res, 400, { error: e.message });
-        }
+        if (!exigir(req, res, PERSONAL)) return;
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
         const { nombre, tipo, precio } = body;
         if (!nombre || !tipo || precio === undefined) {
           return enviarJSON(res, 400, { error: "Campos requeridos: nombre, tipo, precio" });
         }
-        const nuevo = await crearProducto(body);
-        return enviarJSON(res, 201, nuevo);
+        return enviarJSON(res, 201, await crearProducto(body));
       }
 
       if (matchId && method === "PUT") {
-        if (!esAdmin(req)) return enviarJSON(res, 401, { error: "No autorizado" });
-        let body;
-        try {
-          body = await leerBody(req);
-        } catch (e) {
-          return enviarJSON(res, 400, { error: e.message });
-        }
+        if (!exigir(req, res, PERSONAL)) return;
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
         const actualizado = await actualizarProducto(Number(matchId[1]), body);
         if (!actualizado) return enviarJSON(res, 404, { error: "Producto no encontrado" });
         return enviarJSON(res, 200, actualizado);
@@ -408,20 +361,14 @@ const server = http.createServer(async (req, res) => {
 
       const matchStock = ruta.match(/^\/productos\/(\d+)\/stock$/);
       if (matchStock && (method === "PATCH" || method === "PUT")) {
-        if (!esAdmin(req)) return enviarJSON(res, 401, { error: "No autorizado" });
-        let body;
-        try {
-          body = await leerBody(req);
-        } catch (e) {
-          return enviarJSON(res, 400, { error: e.message });
-        }
+        if (!exigir(req, res, PERSONAL)) return;
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
         const id = Number(matchStock[1]);
         if (method === "PUT") {
-          // Reemplaza todo el stock (objeto) o lo quita (null).
           const existente = await obtenerProducto(id);
           if (!existente) return enviarJSON(res, 404, { error: "Producto no encontrado" });
-          const act = await actualizarProducto(id, { stock: body.stock ?? null });
-          return enviarJSON(res, 200, act);
+          return enviarJSON(res, 200, await actualizarProducto(id, { stock: body.stock ?? null }));
         }
         if (body.talla === undefined || (body.delta === undefined && body.cantidad === undefined)) {
           return enviarJSON(res, 400, { error: "Campos requeridos: talla y (delta o cantidad)" });
@@ -432,62 +379,124 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (matchId && method === "DELETE") {
-        if (!esAdmin(req)) return enviarJSON(res, 401, { error: "No autorizado" });
+        if (!exigir(req, res, ["administrador"])) return;
         const eliminado = await eliminarProducto(Number(matchId[1]));
         if (!eliminado) return enviarJSON(res, 404, { error: "Producto no encontrado" });
         return enviarJSON(res, 200, { mensaje: "Producto eliminado", producto: eliminado });
       }
 
-      if (ruta === "/pedidos" && method === "GET") {
-        if (!esAdmin(req)) return enviarJSON(res, 401, { error: "No autorizado" });
-        return enviarJSON(res, 200, await leerPedidos());
-      }
-
-      const matchPedido = ruta.match(/^\/pedidos\/(\d+)$/);
-      if (matchPedido && (method === "PATCH" || method === "PUT")) {
-        if (!esAdmin(req)) return enviarJSON(res, 401, { error: "No autorizado" });
-        let body;
-        try {
-          body = await leerBody(req);
-        } catch (e) {
-          return enviarJSON(res, 400, { error: e.message });
-        }
-        if (body.estado !== "pendiente" && body.estado !== "recibido") {
-          return enviarJSON(res, 400, { error: 'estado debe ser "pendiente" o "recibido"' });
-        }
-        const act = await cambiarEstadoPedido(Number(matchPedido[1]), body.estado);
-        if (!act) return enviarJSON(res, 404, { error: "Pedido no encontrado" });
-        return enviarJSON(res, 200, act);
-      }
-
+      // ---- Pedidos (público: registrar, informar pago y seguimiento)
       if (ruta === "/pedidos" && method === "POST") {
-        let body;
-        try {
-          body = await leerBody(req);
-        } catch (e) {
-          return enviarJSON(res, 400, { error: e.message });
+        if (limitado(req, 15, 60000)) return enviarJSON(res, 429, { error: "Demasiadas solicitudes. Intenta en un minuto." });
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
+        const pedido = await T((ctx) => negocio.crearPedido(ctx, body));
+        const cfg = await datos.lectura((ctx) => negocio.leerConfig(ctx));
+        return enviarJSON(res, 201, { ...pedido, instrucciones_pago: cfg.instrucciones_pago, minutos_reserva: cfg.minutos_reserva });
+      }
+
+      if (ruta === "/pedidos/pago" && method === "POST") {
+        if (limitado(req, 15, 60000)) return enviarJSON(res, 429, { error: "Demasiadas solicitudes. Intenta en un minuto." });
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
+        const pago = await T(async (ctx) => {
+          const fila = await ctx.uno("pedidos", { codigo: String(body.codigo || "").trim().toUpperCase() });
+          if (!fila) throw new negocio.ErrorNegocio(404, "No encontramos un pedido con ese código");
+          return negocio.registrarPago(ctx, fila.id, { medio: body.medio, referencia: body.referencia }, "cliente");
+        });
+        return enviarJSON(res, 201, { id: pago.id, estado: pago.estado, medio: pago.medio });
+      }
+
+      if (ruta === "/seguimiento" && method === "GET") {
+        if (limitado(req, 40, 60000)) return enviarJSON(res, 429, { error: "Demasiadas solicitudes. Intenta en un minuto." });
+        return enviarJSON(res, 200, await T((ctx) => negocio.seguimiento(ctx, url.searchParams.get("codigo"))));
+      }
+
+      // ---- Pedidos (interno)
+      if (ruta === "/pedidos" && method === "GET") {
+        if (!exigir(req, res, PERSONAL)) return;
+        return enviarJSON(res, 200, await T((ctx) => negocio.listarPedidos(ctx)));
+      }
+
+      if ((m = ruta.match(/^\/pedidos\/(\d+)$/)) && method === "GET") {
+        if (!exigir(req, res, PERSONAL)) return;
+        return enviarJSON(res, 200, await T((ctx) => negocio.detallePedido(ctx, Number(m[1]))));
+      }
+
+      if ((m = ruta.match(/^\/pedidos\/(\d+)\/pagos$/)) && method === "POST") {
+        const rol = exigir(req, res, PERSONAL);
+        if (!rol) return;
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
+        return enviarJSON(res, 201, await T((ctx) => negocio.registrarPago(ctx, Number(m[1]), body, rol)));
+      }
+
+      if ((m = ruta.match(/^\/pagos\/(\d+)$/)) && method === "PATCH") {
+        const rol = exigir(req, res, ["administrador"]);
+        if (!rol) return;
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
+        return enviarJSON(res, 200, await T((ctx) => negocio.resolverPago(ctx, Number(m[1]), body, rol)));
+      }
+
+      if ((m = ruta.match(/^\/pedidos\/(\d+)\/estado$/)) && method === "PATCH") {
+        const rol = exigir(req, res, PERSONAL);
+        if (!rol) return;
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
+        return enviarJSON(res, 200, await T((ctx) => negocio.cambiarEstado(ctx, Number(m[1]), body.estado, body, rol)));
+      }
+
+      if ((m = ruta.match(/^\/pedidos\/(\d+)\/comprobante$/)) && method === "PATCH") {
+        const rol = exigir(req, res, ["administrador"]);
+        if (!rol) return;
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
+        return enviarJSON(res, 200, await T((ctx) => negocio.registrarComprobante(ctx, Number(m[1]), body, rol)));
+      }
+
+      if ((m = ruta.match(/^\/pedidos\/(\d+)\/entrega$/)) && method === "POST") {
+        const rol = exigir(req, res, PERSONAL);
+        if (!rol) return;
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
+        return enviarJSON(res, 200, await T((ctx) => negocio.registrarEntrega(ctx, Number(m[1]), body, rol)));
+      }
+
+      // ---- Cambios, devoluciones y reclamos
+      if (ruta === "/reclamos" && method === "GET") {
+        if (!exigir(req, res, PERSONAL)) return;
+        return enviarJSON(res, 200, await T((ctx) => negocio.listarReclamos(ctx)));
+      }
+      if (ruta === "/reclamos" && method === "POST") {
+        const rol = exigir(req, res, PERSONAL);
+        if (!rol) return;
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
+        return enviarJSON(res, 201, await T((ctx) => negocio.crearReclamo(ctx, body, rol)));
+      }
+      if ((m = ruta.match(/^\/reclamos\/(\d+)$/)) && method === "PATCH") {
+        const rol = exigir(req, res, PERSONAL);
+        if (!rol) return;
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
+        return enviarJSON(res, 200, await T((ctx) => negocio.actualizarReclamo(ctx, Number(m[1]), body, rol)));
+      }
+
+      // ---- Reportes (administrador y gerente)
+      if (ruta === "/reportes" && method === "GET") {
+        if (!exigir(req, res, ["administrador", "gerente"])) return;
+        const desde = url.searchParams.get("desde") || "";
+        const hasta = url.searchParams.get("hasta") || "";
+        for (const f of [desde, hasta]) {
+          if (f && !/^\d{4}-\d{2}-\d{2}$/.test(f)) return enviarJSON(res, 400, { error: "Fechas con formato AAAA-MM-DD" });
         }
-        const { cliente, items, total } = body;
-        if (!cliente || !items || !total) {
-          return enviarJSON(res, 400, { error: "Campos requeridos: cliente, items, total" });
-        }
-        const resultado = await crearPedido(body);
-        if (resultado.faltantes) {
-          return enviarJSON(res, 409, {
-            error: "Algunos productos ya no tienen stock suficiente",
-            detalle: resultado.faltantes,
-          });
-        }
-        return enviarJSON(res, 201, resultado.pedido);
+        return enviarJSON(res, 200, await T((ctx) => negocio.reportes(ctx, { desde, hasta })));
       }
 
       if (ruta === "/contacto" && method === "POST") {
-        let body;
-        try {
-          body = await leerBody(req);
-        } catch (e) {
-          return enviarJSON(res, 400, { error: e.message });
-        }
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
         const { nombre, email, telefono, mensaje } = body;
         if (!nombre || !email || !mensaje) {
           return enviarJSON(res, 400, { error: "Campos requeridos: nombre, email, mensaje" });
@@ -516,6 +525,9 @@ const server = http.createServer(async (req, res) => {
 
     servirArchivo(res, filePath);
   } catch (err) {
+    if (err instanceof negocio.ErrorNegocio) {
+      return enviarJSON(res, err.status, { error: err.message, ...err.extra });
+    }
     console.error("Error en la solicitud:", err);
     enviarJSON(res, 500, { error: "Error interno del servidor" });
   }
@@ -523,7 +535,13 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Servidor Calzados Paredes corriendo en http://localhost:${PORT}`);
-  asegurarEsquema()
-    .then(() => console.log("Esquema verificado (columna stock lista)"))
+  datos
+    .lectura((ctx) => negocio.asegurarEsquema(ctx))
+    .then(() => console.log("Esquema verificado (stock, pagos, reservas, historial, reclamos)"))
     .catch((e) => console.error("No se pudo verificar el esquema:", e.message));
+
+  // Libera las reservas sin pago vencidas (cada minuto).
+  setInterval(() => {
+    datos.transaccion((ctx) => negocio.vencerReservas(ctx)).catch((e) => console.error("Vencimiento de reservas:", e.message));
+  }, 60000).unref();
 });
