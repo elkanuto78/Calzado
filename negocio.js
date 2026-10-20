@@ -13,7 +13,18 @@ const ESTADOS_CONFIRMADOS = ["PAGO_VALIDADO", "EN_PREPARACION", "ENTREGADO"];
 const MEDIOS_PAGO = ["Yape", "Plin", "Transferencia", "Depósito", "Otro"];
 const TIPOS_RECLAMO = ["cambio_talla", "devolucion", "fabricacion_8_dias", "reclamo"];
 const ESTADOS_RECLAMO = ["ABIERTO", "EN_PROCESO", "RESUELTO", "RECHAZADO"];
-const CONFIG_DEFECTO = { minutos_reserva: "30", instrucciones_pago: "" };
+const CONFIG_DEFECTO = { minutos_reserva: "30", instrucciones_pago: "", qr_yape: "", qr_plin: "" };
+const MAX_IMAGEN_CHARS = 600000; // ~450 KB de imagen en base64
+
+// Acepta solo imágenes en base64 (data URL) de tamaño acotado. Devuelve el texto o lanza error.
+function validarImagen(valor, nombre) {
+  const v = String(valor || "");
+  if (v.length > MAX_IMAGEN_CHARS) throw new ErrorNegocio(400, `${nombre}: la imagen es demasiado pesada (máx. ~450 KB)`);
+  if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(v)) {
+    throw new ErrorNegocio(400, `${nombre}: el archivo debe ser una imagen JPG, PNG o WEBP`);
+  }
+  return v;
+}
 
 let reloj = () => new Date();
 function setReloj(fn) { reloj = fn; }
@@ -81,6 +92,7 @@ function mapearPago(row, todosMismaRef) {
     validado_fecha: row.validado_fecha || null,
     nota: row.nota || null,
     duplicada,
+    tiene_voucher: row.tiene_voucher === true || row.tiene_voucher === 1,
   };
 }
 
@@ -125,6 +137,7 @@ async function leerConfig(ctx) {
   return {
     minutos_reserva: Math.max(5, Math.min(1440, parseInt(cfg.minutos_reserva, 10) || 30)),
     instrucciones_pago: cfg.instrucciones_pago || "",
+    qr: { yape: cfg.qr_yape || "", plin: cfg.qr_plin || "" },
     medios: MEDIOS_PAGO,
   };
 }
@@ -140,6 +153,9 @@ async function guardarConfig(ctx, datos) {
   }
   if (datos.instrucciones_pago !== undefined) {
     cambios.instrucciones_pago = String(datos.instrucciones_pago).slice(0, 1500);
+  }
+  for (const [campo, nombre] of [["qr_yape", "QR de Yape"], ["qr_plin", "QR de Plin"]]) {
+    if (datos[campo] !== undefined) cambios[campo] = datos[campo] === "" || datos[campo] === null ? "" : validarImagen(datos[campo], nombre);
   }
   for (const [clave, valor] of Object.entries(cambios)) {
     const existe = await ctx.uno("configuracion", { clave });
@@ -361,7 +377,13 @@ function limpiarReferencia(ref) {
   return r;
 }
 
-async function registrarPago(ctx, pedidoId, { medio, referencia, monto }, usuario) {
+async function leerVoucher(ctx, pagoId) {
+  const v = await ctx.uno("vouchers", { pago_id: pagoId });
+  if (!v) throw new ErrorNegocio(404, "Este pago no tiene voucher");
+  return { voucher: v.imagen };
+}
+
+async function registrarPago(ctx, pedidoId, { medio, referencia, monto, voucher }, usuario) {
   const fila = await obtenerPedido(ctx, pedidoId);
   const estado = normalizarEstado(fila.estado);
   if (estado === "CANCELADO") {
@@ -372,6 +394,7 @@ async function registrarPago(ctx, pedidoId, { medio, referencia, monto }, usuari
   }
   if (!MEDIOS_PAGO.includes(medio)) throw new ErrorNegocio(400, "Medio de pago no válido");
   const ref = limpiarReferencia(referencia);
+  const imagenVoucher = voucher ? validarImagen(voucher, "Voucher") : null;
   const existentes = await ctx.lista("pagos", { pedido_id: fila.id });
   if (existentes.some((p) => p.estado === "POR_VALIDAR")) {
     throw new ErrorNegocio(409, "Ya hay un pago en revisión para este pedido");
@@ -389,8 +412,10 @@ async function registrarPago(ctx, pedidoId, { medio, referencia, monto }, usuari
     monto: Math.round(importe * 100) / 100,
     estado: "POR_VALIDAR",
     fecha: ahora(),
+    tiene_voucher: imagenVoucher ? 1 : 0,
   });
-  await registrarHistorial(ctx, fila.id, estado, estado, usuario, `Pago informado (${medio} · ${ref})`);
+  if (imagenVoucher) await ctx.insertar("vouchers", { pago_id: pago.id, imagen: imagenVoucher });
+  await registrarHistorial(ctx, fila.id, estado, estado, usuario, `Pago informado (${medio} · ${ref})${imagenVoucher ? " con voucher" : ""}`);
   return mapearPago(pago, await ctx.lista("pagos", { referencia: ref }));
 }
 
@@ -666,6 +691,8 @@ const ESQUEMA = [
     validado_por NVARCHAR(50) NULL,
     validado_fecha VARCHAR(19) NULL,
     nota NVARCHAR(300) NULL)`,
+  "IF COL_LENGTH('pagos','tiene_voucher') IS NULL ALTER TABLE pagos ADD tiene_voucher BIT NOT NULL CONSTRAINT DF_pagos_voucher DEFAULT 0",
+  "IF OBJECT_ID('vouchers','U') IS NULL CREATE TABLE vouchers (id INT IDENTITY(1,1) PRIMARY KEY, pago_id INT NOT NULL, imagen NVARCHAR(MAX) NOT NULL)",
   `IF OBJECT_ID('reservas','U') IS NULL CREATE TABLE reservas (
     id INT IDENTITY(1,1) PRIMARY KEY,
     pedido_id INT NOT NULL,
@@ -710,6 +737,6 @@ module.exports = {
   setReloj, ahora, sumarMinutos, mapearPedido,
   leerConfig, guardarConfig, anotarDisponibilidad,
   crearPedido, vencerReservas, listarPedidos, detallePedido, seguimiento,
-  registrarPago, resolverPago, cambiarEstado, registrarComprobante, registrarEntrega,
+  registrarPago, leerVoucher, resolverPago, cambiarEstado, registrarComprobante, registrarEntrega,
   crearReclamo, actualizarReclamo, listarReclamos, reportes, asegurarEsquema,
 };

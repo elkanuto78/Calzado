@@ -491,7 +491,7 @@ const server = http.createServer(async (req, res) => {
         const pago = await T(async (ctx) => {
           const fila = await ctx.uno("pedidos", { codigo: String(body.codigo || "").trim().toUpperCase() });
           if (!fila) throw new negocio.ErrorNegocio(404, "No encontramos un pedido con ese código");
-          return negocio.registrarPago(ctx, fila.id, { medio: body.medio, referencia: body.referencia }, "cliente");
+          return negocio.registrarPago(ctx, fila.id, { medio: body.medio, referencia: body.referencia, voucher: body.voucher }, "cliente");
         });
         return enviarJSON(res, 201, { id: pago.id, estado: pago.estado, medio: pago.medio });
       }
@@ -518,6 +518,11 @@ const server = http.createServer(async (req, res) => {
         const body = await leerBodySeguro(req, res);
         if (!body) return;
         return enviarJSON(res, 201, await T((ctx) => negocio.registrarPago(ctx, Number(m[1]), body, actorDe(req))));
+      }
+
+      if ((m = ruta.match(/^\/pagos\/(\d+)\/voucher$/)) && method === "GET") {
+        if (!exigir(req, res, PERSONAL)) return;
+        return enviarJSON(res, 200, await T((ctx) => negocio.leerVoucher(ctx, Number(m[1]))));
       }
 
       if ((m = ruta.match(/^\/pagos\/(\d+)$/)) && method === "PATCH") {
