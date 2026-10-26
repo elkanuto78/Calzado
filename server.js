@@ -563,6 +563,13 @@ const server = http.createServer(async (req, res) => {
         return enviarJSON(res, 201, { id: pago.id, estado: pago.estado, medio: pago.medio });
       }
 
+      if (ruta === "/pedidos/cancelar" && method === "POST") {
+        if (limitado(req, 15, 60000)) return enviarJSON(res, 429, { error: "Demasiadas solicitudes. Intenta en un minuto." });
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
+        return enviarJSON(res, 200, await T((ctx) => negocio.cancelarPedidoCliente(ctx, body.codigo)));
+      }
+
       if (ruta === "/seguimiento" && method === "GET") {
         if (limitado(req, 40, 60000)) return enviarJSON(res, 429, { error: "Demasiadas solicitudes. Intenta en un minuto." });
         return enviarJSON(res, 200, await T((ctx) => negocio.seguimiento(ctx, url.searchParams.get("codigo"))));
