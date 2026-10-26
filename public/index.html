@@ -186,6 +186,17 @@
       <h2 class="section-title text-center">¿Tienes alguna consulta?</h2>
       <form class="contact-form" id="contactForm" onsubmit="submitForm(event)" novalidate>
         <div class="row">
+          <div class="col-xs-12 form-group">
+            <label for="contactType">¿Qué necesitas? *</label>
+            <select id="contactType" class="form-control" onchange="cambiarTipoContacto(this.value)">
+              <option value="consulta">Consulta general</option>
+              <option value="cambio">Cambio de un pedido</option>
+              <option value="reclamo">Reclamo</option>
+              <option value="personalizado">Pedido personalizado</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
           <div class="col-sm-6 col-xs-12 form-group">
             <label for="contactName">Nombre completo *</label>
             <input type="text" id="contactName" class="form-control" placeholder="Tu nombre" oninput="validateField(this)">
@@ -201,6 +212,30 @@
           <div class="col-xs-12 form-group">
             <label for="contactPhone">Teléfono / WhatsApp</label>
             <input type="tel" id="contactPhone" class="form-control" placeholder="+51 999 000 000" oninput="formatPhone(this)">
+          </div>
+        </div>
+        <div class="row hidden" id="grupoPedido">
+          <div class="col-xs-12 form-group">
+            <label for="contactOrder">Código de tu pedido (opcional)</label>
+            <input type="text" id="contactOrder" class="form-control" placeholder="Ej. CP-ABC123" maxlength="20" autocapitalize="characters">
+          </div>
+        </div>
+        <div class="row hidden" id="grupoPersonalizado">
+          <div class="col-sm-6 col-xs-12 form-group">
+            <label for="customModel">Modelo de referencia (opcional)</label>
+            <input type="text" id="customModel" class="form-control" placeholder="Ej. Sandalia Sport Tira" maxlength="120">
+          </div>
+          <div class="col-sm-6 col-xs-12 form-group">
+            <label for="customColor">Color deseado</label>
+            <input type="text" id="customColor" class="form-control" placeholder="Ej. Beige con dorado" maxlength="60">
+          </div>
+          <div class="col-sm-6 col-xs-12 form-group">
+            <label for="customSize">Talla</label>
+            <input type="text" id="customSize" class="form-control" placeholder="Ej. 37" maxlength="20">
+          </div>
+          <div class="col-sm-6 col-xs-12 form-group">
+            <label for="customQty">Cantidad de pares</label>
+            <input type="text" id="customQty" class="form-control" placeholder="Ej. 2" maxlength="10" inputmode="numeric">
           </div>
         </div>
         <div class="row">
@@ -220,6 +255,8 @@
         <div class="success-icon">&#10003;</div>
         <h3>¡Mensaje enviado!</h3>
         <p>Nos pondremos en contacto contigo a la brevedad.</p>
+        <p id="formSuccessCode" class="hidden"></p>
+        <button type="button" class="btn btn-gold" onclick="nuevoMensajeContacto()" style="margin-top:14px">Enviar otro mensaje</button>
       </div>
     </div>
   </section>
