@@ -307,6 +307,26 @@ async function cancelarFila(ctx, fila, usuario, nota) {
   await registrarHistorial(ctx, fila.id, normalizarEstado(fila.estado), "CANCELADO", usuario, nota);
 }
 
+// El cliente cancela su propio pedido (se arrepintió o no va a pagar). Solo se permite
+// mientras no haya un pago informado: si ya pagó o su pago está en revisión, debe contactar a la tienda.
+async function cancelarPedidoCliente(ctx, codigo) {
+  const cod = String(codigo || "").trim().toUpperCase();
+  if (!cod) throw new ErrorNegocio(400, "Falta el código del pedido");
+  const fila = await ctx.uno("pedidos", { codigo: cod }, { bloquear: true });
+  if (!fila) throw new ErrorNegocio(404, "No encontramos un pedido con ese código");
+  const estado = normalizarEstado(fila.estado);
+  if (estado === "CANCELADO") return { codigo: cod, estado: "CANCELADO" }; // ya estaba cancelado
+  if (!["PENDIENTE", "RESERVADO"].includes(estado)) {
+    throw new ErrorNegocio(409, "Tu pago ya fue confirmado. Para cancelar o cambiar tu pedido, escríbenos desde la sección Contacto.");
+  }
+  const pagos = await ctx.lista("pagos", { pedido_id: fila.id });
+  if (pagos.some((p) => p.estado === "POR_VALIDAR")) {
+    throw new ErrorNegocio(409, "Tu pago está en revisión. Para cancelar, escríbenos desde la sección Contacto.");
+  }
+  await cancelarFila(ctx, fila, "cliente", "Cancelado por el cliente");
+  return { codigo: cod, estado: "CANCELADO" };
+}
+
 // Más de N minutos sin pago registrado => cancelar y liberar la reserva.
 async function vencerReservas(ctx) {
   const t = ahora();
@@ -898,7 +918,7 @@ async function asegurarEsquema(ctx) {
 
 module.exports = {
   ErrorNegocio, ESTADOS_PEDIDO, MEDIOS_PAGO, TIPOS_RECLAMO, TIPOS_MENSAJE, ESTADOS_MENSAJE, ESQUEMA,
-  crearMensaje, listarMensajes, actualizarMensaje,
+  crearMensaje, listarMensajes, actualizarMensaje, cancelarPedidoCliente,
   setReloj, ahora, sumarMinutos, mapearPedido,
   leerConfig, guardarConfig, anotarDisponibilidad,
   crearPedido, vencerReservas, listarPedidos, detallePedido, seguimiento,
