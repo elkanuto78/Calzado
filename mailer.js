@@ -16,6 +16,10 @@ function obtenerTransporter() {
 
   transporter = nodemailer.createTransport({
     service: "gmail",
+    // Tiempos límite: si Gmail no responde, el envío falla en vez de quedarse colgado.
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS, // Contraseña de aplicación de Gmail, no la contraseña normal
@@ -28,7 +32,14 @@ function obtenerTransporter() {
 // Envía la consulta del formulario de contacto de la tienda al correo
 // configurado. Lanza un error si no se pudo enviar (el caller decide
 // cómo responder al cliente).
-async function enviarConsultaContacto({ nombre, email, telefono, mensaje }) {
+const ETIQUETA_TIPO_MENSAJE = {
+  consulta: "Consulta",
+  cambio: "Cambio",
+  reclamo: "Reclamo",
+  personalizado: "Pedido personalizado",
+};
+
+async function enviarConsultaContacto({ nombre, email, telefono, mensaje, tipo, codigo, pedido_codigo, detalle, urlPanel }) {
   const t = obtenerTransporter();
   if (!t) {
     throw new Error(
@@ -36,27 +47,42 @@ async function enviarConsultaContacto({ nombre, email, telefono, mensaje }) {
     );
   }
 
+  const etiqueta = ETIQUETA_TIPO_MENSAJE[tipo] || "Consulta";
+  const extra = [];
+  if (pedido_codigo) extra.push(["Pedido", pedido_codigo]);
+  if (detalle) {
+    if (detalle.modelo) extra.push(["Modelo de referencia", detalle.modelo]);
+    if (detalle.color) extra.push(["Color", detalle.color]);
+    if (detalle.talla) extra.push(["Talla", detalle.talla]);
+    if (detalle.cantidad) extra.push(["Cantidad", detalle.cantidad]);
+  }
+
   await t.sendMail({
     from: `"Calzados Paredes - Web" <${process.env.EMAIL_USER}>`,
     to: DESTINO_CONTACTO,
     replyTo: email,
-    subject: `Nueva consulta de ${nombre} · Calzados Paredes`,
+    subject: `${etiqueta}${codigo ? " " + codigo : ""} de ${nombre} · Calzados Paredes`,
     text: [
+      `Tipo: ${etiqueta}`,
       `Nombre: ${nombre}`,
       `Correo: ${email}`,
       `Teléfono: ${telefono || "(no proporcionado)"}`,
+      ...extra.map(([k, v]) => `${k}: ${v}`),
       "",
       "Mensaje:",
       mensaje,
+      ...(urlPanel ? ["", `Gestiónalo en el panel: ${urlPanel}`] : []),
     ].join("\n"),
     html: `
       <div style="font-family: sans-serif; font-size: 15px; color: #333;">
-        <h2 style="color:#3f2601;">Nueva consulta desde la web</h2>
+        <h2 style="color:#3f2601;">${escaparHtml(etiqueta)} desde la web</h2>
         <p><strong>Nombre:</strong> ${escaparHtml(nombre)}</p>
         <p><strong>Correo:</strong> ${escaparHtml(email)}</p>
         <p><strong>Teléfono:</strong> ${escaparHtml(telefono || "(no proporcionado)")}</p>
+        ${extra.map(([k, v]) => `<p><strong>${escaparHtml(k)}:</strong> ${escaparHtml(v)}</p>`).join("")}
         <p><strong>Mensaje:</strong></p>
         <p style="white-space: pre-wrap;">${escaparHtml(mensaje)}</p>
+        ${urlPanel ? `<p><a href="${escaparHtml(urlPanel)}" style="background:#c9a84c;color:#3f2601;padding:10px 18px;border-radius:6px;text-decoration:none;">Abrir el panel</a></p>` : ""}
       </div>
     `,
   });
