@@ -678,20 +678,41 @@ const server = http.createServer(async (req, res) => {
         return enviarJSON(res, 200, await T((ctx) => negocio.reportes(ctx, { desde, hasta })));
       }
 
+      // ---- Mensajes del formulario web (consultas, cambios, reclamos, pedidos personalizados)
       if (ruta === "/contacto" && method === "POST") {
+        if (limitado(req, 8, 10 * 60 * 1000)) {
+          return enviarJSON(res, 429, { error: "Demasiados mensajes seguidos. Intenta de nuevo en unos minutos." });
+        }
         const body = await leerBodySeguro(req, res);
         if (!body) return;
-        const { nombre, email, telefono, mensaje } = body;
-        if (!nombre || !email || !mensaje) {
-          return enviarJSON(res, 400, { error: "Campos requeridos: nombre, email, mensaje" });
-        }
-        try {
-          await enviarConsultaContacto({ nombre, email, telefono, mensaje });
-        } catch (e) {
-          console.error("No se pudo enviar el correo de contacto:", e.message);
-          return enviarJSON(res, 502, { error: "No se pudo enviar tu mensaje. Intenta de nuevo más tarde." });
-        }
-        return enviarJSON(res, 200, { mensaje: "Consulta enviada correctamente" });
+        // Primero se guarda en la base de datos (así llega al panel aunque el correo falle).
+        const guardado = await T((ctx) => negocio.crearMensaje(ctx, body));
+        // El aviso por correo se envía en segundo plano: no hace esperar al cliente ni puede romper el envío.
+        const host = req.headers["x-forwarded-host"] || req.headers.host || "";
+        const proto = req.headers["x-forwarded-proto"] || "https";
+        enviarConsultaContacto({
+          nombre: guardado.nombre,
+          email: guardado.email,
+          telefono: guardado.telefono,
+          mensaje: guardado.mensaje,
+          tipo: guardado.tipo,
+          codigo: guardado.codigo,
+          pedido_codigo: guardado.pedido_codigo,
+          detalle: guardado.detalle,
+          urlPanel: host ? `${proto}://${host}/admin.html` : "/admin.html",
+        }).catch((e) => console.error("No se pudo enviar el aviso por correo:", e.message));
+        return enviarJSON(res, 201, { mensaje: "Mensaje recibido", codigo: guardado.codigo });
+      }
+
+      if (ruta === "/mensajes" && method === "GET") {
+        if (!exigir(req, res, PERSONAL)) return;
+        return enviarJSON(res, 200, await T((ctx) => negocio.listarMensajes(ctx)));
+      }
+      if ((m = ruta.match(/^\/mensajes\/(\d+)$/)) && method === "PATCH") {
+        if (!exigir(req, res, PERSONAL)) return;
+        const body = await leerBodySeguro(req, res);
+        if (!body) return;
+        return enviarJSON(res, 200, await T((ctx) => negocio.actualizarMensaje(ctx, Number(m[1]), body, actorDe(req))));
       }
 
       return enviarJSON(res, 404, { error: "Ruta de API no encontrada" });
@@ -721,7 +742,7 @@ server.listen(PORT, () => {
   console.log(`Servidor Calzados Paredes corriendo en http://localhost:${PORT}`);
   datos
     .lectura((ctx) => negocio.asegurarEsquema(ctx))
-    .then(() => { console.log("Esquema verificado (stock, pagos, reservas, historial, reclamos, usuarios)"); return refrescarUsuariosSilencioso(); })
+    .then(() => { console.log("Esquema verificado (stock, pagos, reservas, historial, reclamos, mensajes, usuarios)"); return refrescarUsuariosSilencioso(); })
     .catch((e) => console.error("No se pudo verificar el esquema:", e.message));
 
   setInterval(refrescarUsuariosSilencioso, 60000).unref();

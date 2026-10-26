@@ -387,7 +387,26 @@
   .badge-estado { display: inline-block; font-size: 0.72rem; padding: 3px 10px; border-radius: 20px; background: #fff3cd; color: #8a6100; white-space: nowrap; }
   .badge-estado.PAGO_VALIDADO, .badge-estado.EN_PREPARACION, .badge-estado.ENTREGADO, .badge-estado.VALIDADO, .badge-estado.RESUELTO { background: #e6f4ea; color: #1e6b34; }
   .badge-estado.CANCELADO, .badge-estado.RECHAZADO { background: #fde2e1; color: #a32d2d; }
-  .badge-estado.POR_VALIDAR { background: #e0ecff; color: #1f4c99; }
+  .badge-estado.POR_VALIDAR, .badge-estado.EN_CONTACTO { background: #e0ecff; color: #1f4c99; }
+  .badge-estado.DESCARTADO { background: #ececec; color: #666; }
+
+  /* ---- Mensajes de la web ---- */
+  .tab-cnt { display: inline-block; min-width: 18px; padding: 1px 6px; margin-left: 4px; border-radius: 10px; background: #c0392b; color: #fff; font-size: 0.72rem; line-height: 1.4; text-align: center; }
+  .tabs { flex-wrap: wrap; }
+  .tabla-mensajes td { vertical-align: top; }
+  .msg-sub { font-size: 0.78rem; color: var(--texto-suave); }
+  .msg-texto { white-space: pre-wrap; word-break: break-word; max-width: 420px; }
+  .msg-extra { font-size: 0.82rem; margin-top: 0.4rem; color: var(--texto); }
+  .msg-extra span { color: var(--texto-suave); }
+  .msg-nota { font-size: 0.8rem; margin-top: 0.4rem; padding: 4px 8px; background: var(--crema); border-radius: 6px; color: var(--texto-suave); }
+  .msg-tipo { display: inline-block; margin-top: 4px; font-size: 0.7rem; padding: 2px 8px; border-radius: 20px; background: var(--crema); color: var(--marron); border: 1px solid var(--crema-oscura); }
+  .msg-tipo.reclamo { background: #fde2e1; color: #a32d2d; border-color: #f0bdbb; }
+  .msg-tipo.cambio { background: #e0ecff; color: #1f4c99; border-color: #c4d7f5; }
+  .msg-tipo.personalizado { background: #fbf3dc; color: #8a6100; border-color: #ecd9a0; }
+  .msg-acciones { min-width: 150px; }
+  .msg-contacto, .msg-estados { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+  .msg-filtro-estado { padding: 0.5rem 0.8rem; border: 1px solid var(--crema-oscura); border-radius: var(--radio); font-family: var(--fuente-cuerpo); background: var(--blanco); }
+  .msg-vacio { text-align: center; padding: 2.5rem 1rem; color: var(--texto-suave); }
   .modal-fondo { position: fixed; inset: 0; background: rgba(42,26,0,0.55); z-index: 1000; display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 2rem 1rem; }
   .modal-fondo[hidden] { display: none; }
   .modal-caja { background: var(--blanco); border-radius: 14px; width: 100%; max-width: 760px; padding: 1.5rem; box-shadow: 0 12px 40px rgba(0,0,0,0.3); position: relative; }
@@ -567,6 +586,8 @@
       <button class="tab-btn" data-tab="tab-modelos" data-roles="administrador,vendedor">Modelos</button>
       <button class="tab-btn" data-tab="tab-stock" data-roles="administrador,vendedor">Stock</button>
       <button class="tab-btn" data-tab="tab-reclamos" data-roles="administrador,vendedor">Cambios y reclamos</button>
+      <button class="tab-btn" data-tab="tab-mensajes" data-roles="administrador,vendedor">Mensajes <span class="tab-cnt" id="cnt-mensajes" style="display:none"></span></button>
+      <button class="tab-btn" data-tab="tab-personalizados" data-roles="administrador,vendedor">Pedidos personalizados <span class="tab-cnt" id="cnt-personalizados" style="display:none"></span></button>
       <button class="tab-btn" data-tab="tab-reportes" data-roles="administrador,gerente">Reportes</button>
       <button class="tab-btn" data-tab="tab-usuarios" data-roles="administrador">Usuarios</button>
       <button class="tab-btn" data-tab="tab-ajustes" data-roles="administrador">Ajustes</button>
@@ -743,6 +764,22 @@
       <div id="reclamos-lista"></div>
     </div>
 
+    <div id="tab-mensajes" class="tab-panel" data-roles="administrador,vendedor">
+      <div class="toolbar">
+        <p class="ayuda-colores" style="flex:1;margin:0">Consultas, solicitudes de cambio y reclamos enviados desde el formulario "Escríbenos" de la tienda. Contacta al cliente por WhatsApp o correo y marca el avance.</p>
+        <button class="btn-dorado" id="mensajes-refrescar" style="width:auto; padding:0.6rem 1.2rem;">Actualizar</button>
+      </div>
+      <div id="mensajes-lista"></div>
+    </div>
+
+    <div id="tab-personalizados" class="tab-panel" data-roles="administrador,vendedor">
+      <div class="toolbar">
+        <p class="ayuda-colores" style="flex:1;margin:0">Solicitudes de calzado a medida enviadas desde el formulario "Escríbenos". Contacta a la persona para acordar diseño, precio y plazo.</p>
+        <button class="btn-dorado" id="personalizados-refrescar" style="width:auto; padding:0.6rem 1.2rem;">Actualizar</button>
+      </div>
+      <div id="personalizados-lista"></div>
+    </div>
+
     <div id="tab-reportes" class="tab-panel" data-roles="administrador,gerente">
       <div class="toolbar">
         <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.88rem;">Desde <input type="date" id="rep-desde"></label>
@@ -834,5 +871,6 @@
 <script src="admin.js"></script>
 <script src="admin-gestion.js"></script>
 <script src="admin-usuarios.js"></script>
+<script src="admin-mensajes.js"></script>
 </body>
 </html>
