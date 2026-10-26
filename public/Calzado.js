@@ -720,12 +720,19 @@ async function mostrarPanelPedido(codigo) {
           <input type="text" id="pagoRef" class="form-control" maxlength="40" placeholder="Ej. 123456 (no ingreses datos de tarjeta)">
         </div>
         <div class="form-group">
-          <label for="pagoVoucher">Captura de tu pago <small>(recomendado)</small></label>
-          <label class="voucher-drop" id="voucherDrop" for="pagoVoucher">
-            <img id="voucherPreview" alt="" class="hidden">
-            <span id="voucherTexto">📎 Adjuntar captura del voucher</span>
-          </label>
-          <input type="file" id="pagoVoucher" accept="image/*" hidden onchange="elegirVoucher(this)">
+          <span class="voucher-titulo">Captura de tu pago <small>(recomendado)</small></span>
+          <div class="voucher-drop" id="voucherDrop">
+            <input type="file" id="pagoVoucher" class="voucher-input" accept="image/*" onchange="elegirVoucher(this)" aria-label="Adjuntar captura del voucher">
+            <label class="voucher-zona" for="pagoVoucher">
+              <img id="voucherPreview" alt="" class="voucher-mini hidden">
+              <svg class="voucher-icono" id="voucherIcono" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V5m0 0-4 4m4-4 4 4M5 15v3a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 18v-3"/></svg>
+              <span class="voucher-textos">
+                <span class="voucher-principal" id="voucherTexto">Adjuntar captura del voucher</span>
+                <span class="voucher-sub" id="voucherNombre">JPG o PNG</span>
+              </span>
+            </label>
+            <button type="button" class="voucher-quitar hidden" id="voucherQuitar" onclick="quitarVoucher()" aria-label="Quitar captura">&times;</button>
+          </div>
         </div>
         <button class="btn btn-gold btn-full" id="btnInformarPago" onclick="informarPago('${escHtml(seg.codigo)}')">Informar mi pago</button>
         <p class="pago-nota">Validamos tu pago manualmente. Si no informas el pago a tiempo, se libera el stock.</p>
@@ -800,10 +807,26 @@ async function elegirVoucher(input) {
     const prev = document.getElementById("voucherPreview");
     prev.src = data;
     prev.classList.remove("hidden");
-    document.getElementById("voucherTexto").textContent = "✓ Captura adjunta (toca para cambiar)";
+    document.getElementById("voucherIcono").classList.add("hidden");
+    document.getElementById("voucherTexto").textContent = "Captura adjunta";
+    document.getElementById("voucherNombre").textContent = archivo.name || "Toca para cambiar";
+    document.getElementById("voucherQuitar").classList.remove("hidden");
+    document.getElementById("voucherDrop").classList.add("tiene-archivo");
   } catch (e) {
     mostrarToast(e.message, 4000);
   }
+}
+
+function quitarVoucher() {
+  vouchersPendiente = "";
+  const prev = document.getElementById("voucherPreview");
+  prev.removeAttribute("src");
+  prev.classList.add("hidden");
+  document.getElementById("voucherIcono").classList.remove("hidden");
+  document.getElementById("voucherTexto").textContent = "Adjuntar captura del voucher";
+  document.getElementById("voucherNombre").textContent = "JPG o PNG";
+  document.getElementById("voucherQuitar").classList.add("hidden");
+  document.getElementById("voucherDrop").classList.remove("tiene-archivo");
 }
 
 async function informarPago(codigo) {
