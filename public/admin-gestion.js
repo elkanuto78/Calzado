@@ -80,6 +80,8 @@
     const tel = telefonoWa((p.cliente || {}).telefono);
     return tel ? `https://wa.me/${tel}?text=${encodeURIComponent(mensajeWa(p))}` : "";
   }
+  // Icono de mensaje en trazo fino (hereda color desde CSS, sin emoji)
+  const ICONO_MSG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 20.5l1.7-5.4A8.4 8.4 0 1 1 21 11.5z"/></svg>';
 
   // ---- Orden imprimible (para taller / despacho)
   function imprimirOrden(p) {
@@ -190,7 +192,7 @@
           <td class="items-list">${items}</td>
           <td class="total-cell">${A().formatearMoneda(p.total)}</td>
           <td>${badge(p.estado)}${pago}</td>
-          <td><button type="button" class="btn-mini" data-gestionar="${p.id}">Gestionar</button>${enlaceWa(p) ? ` <a class="btn-wa mini" target="_blank" rel="noopener" href="${enlaceWa(p)}" title="Escribir por WhatsApp">💬</a>` : ""}</td>
+          <td><button type="button" class="btn-mini" data-gestionar="${p.id}">Gestionar</button>${enlaceWa(p) ? ` <a class="btn-wa mini" target="_blank" rel="noopener" href="${enlaceWa(p)}" title="Enviar mensaje" aria-label="Enviar mensaje por WhatsApp">${ICONO_MSG}</a>` : ""}</td>
         </tr>`;
     }).join("");
   }
@@ -335,7 +337,7 @@
       <button class="modal-cerrar" data-cerrar>&times;</button>
       <div class="mp-titulo"><h2>${esc(p.codigo || "Pedido #" + p.id)}</h2>${badge(p.estado)}<span style="color:var(--texto-suave);font-size:0.85rem">${A().formatearFecha(p.fecha)}</span></div>
       <div class="mp-herramientas">
-        ${enlaceWa(p) ? `<a class="btn-wa" target="_blank" rel="noopener" href="${enlaceWa(p)}">💬 Escribir por WhatsApp</a>` : '<span style="font-size:0.8rem;color:var(--texto-suave)">Sin teléfono válido para WhatsApp</span>'}
+        ${enlaceWa(p) ? `<a class="btn-wa" target="_blank" rel="noopener" href="${enlaceWa(p)}">${ICONO_MSG}<span>Enviar mensaje</span></a>` : '<span style="font-size:0.8rem;color:var(--texto-suave)">Sin teléfono válido para WhatsApp</span>'}
         <button type="button" class="btn-mini sec" data-imprimir="1">🖨 Imprimir orden</button>
       </div>
       <div class="mp-seccion">
