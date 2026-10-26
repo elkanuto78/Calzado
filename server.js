@@ -3,6 +3,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const zlib = require("zlib");
 const { sql, getPool } = require("./db");
 const datos = require("./datos");
 const negocio = require("./negocio");
@@ -18,6 +19,7 @@ const MIME_TYPES = {
   ".js":   "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".png":  "image/png",
+  ".webp": "image/webp",
   ".jpg":  "image/jpeg",
   ".jpeg": "image/jpeg",
   ".gif":  "image/gif",
@@ -190,7 +192,7 @@ function enviarJSON(res, statusCode, data) {
     "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Origin": "*",
   });
-  res.end(JSON.stringify(data, null, 2));
+  res.end(JSON.stringify(data)); // compacto: menos bytes por respuesta
 }
 
 // Roles (RNF-01 / RB-02). Cuentas:
@@ -277,16 +279,69 @@ setInterval(() => {
   for (const [ip, l] of intentos) if (!l.some((t) => ahora - t < 60000)) intentos.delete(ip);
 }, 300000).unref();
 
-function servirArchivo(res, filePath) {
-  fs.readFile(filePath, (err, data) => {
-    if (err) {
+// Archivos de texto que vale la pena comprimir con gzip.
+const COMPRIMIBLES = new Set([".html", ".css", ".js", ".json", ".svg"]);
+// Imágenes: si existe una versión .webp al lado (misma ruta) y el navegador la acepta, se envía esa.
+const CON_VERSION_WEBP = new Set([".png", ".jpg", ".jpeg"]);
+const cacheGzip = new Map(); // ruta -> { mtimeMs, buf }
+
+function servirArchivo(req, res, filePath) {
+  let ext = path.extname(filePath).toLowerCase();
+  let ruta = filePath;
+  const acepta = String((req && req.headers["accept"]) || "");
+  const aceptaGzip = /\bgzip\b/.test(String((req && req.headers["accept-encoding"]) || ""));
+
+  if (CON_VERSION_WEBP.has(ext) && acepta.includes("image/webp")) {
+    const webp = filePath.slice(0, -ext.length) + ".webp";
+    try {
+      if (fs.statSync(webp).isFile()) { ruta = webp; ext = ".webp"; }
+    } catch { /* no hay versión webp: se sirve el original */ }
+  }
+
+  fs.stat(ruta, (errStat, st) => {
+    if (errStat || !st.isFile()) {
       res.writeHead(404);
       res.end("Not found");
       return;
     }
-    const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, { "Content-Type": MIME_TYPES[ext] || "application/octet-stream" });
-    res.end(data);
+    const etag = `"${st.size.toString(16)}-${Math.round(st.mtimeMs).toString(16)}"`;
+    const cabeceras = {
+      "Content-Type": MIME_TYPES[ext] || "application/octet-stream",
+      "ETag": etag,
+      "Last-Modified": st.mtime.toUTCString(),
+      // HTML/CSS/JS: siempre se revalidan (304 si no cambiaron). Imágenes y fuentes: caché de 7 días.
+      "Cache-Control": COMPRIMIBLES.has(ext) ? "no-cache" : "public, max-age=604800",
+    };
+    if (CON_VERSION_WEBP.has(path.extname(filePath).toLowerCase())) cabeceras["Vary"] = "Accept";
+    if (COMPRIMIBLES.has(ext)) cabeceras["Vary"] = "Accept-Encoding";
+
+    if (req && req.headers["if-none-match"] === etag) {
+      res.writeHead(304, cabeceras);
+      return res.end();
+    }
+
+    fs.readFile(ruta, (err, data) => {
+      if (err) {
+        res.writeHead(404);
+        res.end("Not found");
+        return;
+      }
+      if (aceptaGzip && COMPRIMIBLES.has(ext) && data.length > 1024) {
+        const previo = cacheGzip.get(ruta);
+        if (previo && previo.mtimeMs === st.mtimeMs) {
+          res.writeHead(200, { ...cabeceras, "Content-Encoding": "gzip", "Content-Length": previo.buf.length });
+          return res.end(previo.buf);
+        }
+        return zlib.gzip(data, { level: 6 }, (e, buf) => {
+          if (e) { res.writeHead(200, cabeceras); return res.end(data); }
+          cacheGzip.set(ruta, { mtimeMs: st.mtimeMs, buf });
+          res.writeHead(200, { ...cabeceras, "Content-Encoding": "gzip", "Content-Length": buf.length });
+          res.end(buf);
+        });
+      }
+      res.writeHead(200, { ...cabeceras, "Content-Length": data.length });
+      res.end(data);
+    });
   });
 }
 
@@ -643,7 +698,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === "/" || pathname === "/index.html") {
-      return servirArchivo(res, path.join(PUBLIC_DIR, "index.html"));
+      return servirArchivo(req, res, path.join(PUBLIC_DIR, "index.html"));
     }
 
     const filePath = path.join(PUBLIC_DIR, pathname);
@@ -652,7 +707,7 @@ const server = http.createServer(async (req, res) => {
       return res.end("Forbidden");
     }
 
-    servirArchivo(res, filePath);
+    servirArchivo(req, res, filePath);
   } catch (err) {
     if (err instanceof negocio.ErrorNegocio) {
       return enviarJSON(res, err.status, { error: err.message, ...err.extra });
