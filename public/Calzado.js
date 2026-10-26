@@ -182,7 +182,7 @@ function crearTarjeta(producto, index) {
          onclick="abrirModal(${producto.id})">
       <div class="product-img-wrapper">
         ${tagHtml}
-        <img src="${producto.imagen}" alt="${producto.nombre}" class="product-img" />
+        <img src="${producto.imagen}" alt="${producto.nombre}" class="product-img" loading="lazy" decoding="async" />
         <div class="product-img-overlay">
           <button class="overlay-btn" onclick="event.stopPropagation(); abrirModal(${producto.id})">
             Ver detalle
@@ -440,7 +440,7 @@ function actualizarCarritoUI() {
       .map(
         (item, i) => `
       <div class="cart-item">
-        <img src="${item.imagen}" alt="${item.nombre}" class="cart-item-img" />
+        <img src="${item.imagen}" alt="${item.nombre}" class="cart-item-img" loading="lazy" decoding="async" />
         <div class="cart-item-info">
           <div class="cart-item-name">${item.nombre}</div>
           <div class="cart-item-meta">Talla ${item.talla} · ${item.color} · x${item.cantidad}</div>
