@@ -442,9 +442,20 @@
   .export-fila label { display: flex; gap: 0.3rem; align-items: center; }
   .export-fila input { padding: 0.35rem 0.5rem; border: 1px solid var(--crema-oscura); border-radius: 6px; font-family: var(--fuente-cuerpo); background: var(--blanco); }
   .export-fila .btn-secundario { padding: 0.4rem 0.9rem; font-size: 0.82rem; cursor: pointer; }
-  .btn-wa { display: inline-block; background: #25d366; color: #fff !important; border-radius: 6px; padding: 0.35rem 0.8rem; font-size: 0.8rem; text-decoration: none; font-family: var(--fuente-cuerpo); }
-  .btn-wa:hover { background: #1ebe5b; }
-  .btn-wa.mini { padding: 0.25rem 0.55rem; margin-left: 4px; }
+  /* Botón de mensaje (WhatsApp): minimalista, en la paleta de la página */
+  .btn-wa {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    background: transparent; color: var(--marron) !important;
+    border: 1px solid var(--crema-oscura); border-radius: var(--radio);
+    padding: 0.4rem 0.85rem; font-size: 0.82rem; font-weight: 400; line-height: 1.2;
+    text-decoration: none; font-family: var(--fuente-cuerpo); cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+  }
+  .btn-wa svg { width: 15px; height: 15px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; color: var(--dorado); transition: color 0.2s ease; }
+  .btn-wa:hover, .btn-wa:focus-visible { border-color: var(--dorado); background: rgba(201,168,76,0.12); outline: none; }
+  .btn-wa:hover svg, .btn-wa:focus-visible svg { color: var(--marron); }
+  .btn-wa.mini { padding: 0; width: 30px; height: 30px; justify-content: center; margin-left: 4px; vertical-align: middle; }
+  .btn-wa.mini svg { width: 16px; height: 16px; }
   .mp-herramientas { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.4rem 0 0.2rem; }
 
   /* ---- QR y visor de voucher ---- */
