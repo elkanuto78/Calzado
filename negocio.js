@@ -13,6 +13,9 @@ const ESTADOS_CONFIRMADOS = ["PAGO_VALIDADO", "EN_PREPARACION", "ENTREGADO"];
 const MEDIOS_PAGO = ["Yape", "Plin", "Transferencia", "Depósito", "Otro"];
 const TIPOS_RECLAMO = ["cambio_talla", "devolucion", "fabricacion_8_dias", "reclamo"];
 const ESTADOS_RECLAMO = ["ABIERTO", "EN_PROCESO", "RESUELTO", "RECHAZADO"];
+// Mensajes del formulario web "Escríbenos": consultas, cambios, reclamos y pedidos personalizados.
+const TIPOS_MENSAJE = ["consulta", "cambio", "reclamo", "personalizado"];
+const ESTADOS_MENSAJE = ["NUEVO", "EN_CONTACTO", "RESUELTO", "DESCARTADO"];
 const CONFIG_DEFECTO = { minutos_reserva: "30", instrucciones_pago: "", qr_yape: "", qr_plin: "" };
 const MAX_IMAGEN_CHARS = 600000; // ~450 KB de imagen en base64
 
@@ -658,6 +661,96 @@ async function actualizarReclamo(ctx, id, { estado, nota, reingresar_stock }, us
   return act;
 }
 
+// ---------------------------------------------------------------- Mensajes web
+// Datos extra de un pedido personalizado (todos opcionales, texto corto).
+function limpiarDetalle(d) {
+  d = d && typeof d === "object" ? d : {};
+  const t = (v, max) => String(v == null ? "" : v).trim().slice(0, max);
+  return {
+    modelo: t(d.modelo, 120),
+    color: t(d.color, 60),
+    talla: t(d.talla, 20),
+    cantidad: t(d.cantidad, 10),
+  };
+}
+
+async function crearMensaje(ctx, datos) {
+  datos = datos || {};
+  const tipo = TIPOS_MENSAJE.includes(datos.tipo) ? datos.tipo : "consulta";
+  const nombre = String(datos.nombre || "").trim();
+  const email = String(datos.email || "").trim();
+  const telefono = String(datos.telefono || "").trim();
+  const mensaje = String(datos.mensaje || "").trim();
+  if (nombre.length < 2 || nombre.length > 120) throw new ErrorNegocio(400, "Ingresa tu nombre completo");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 150) throw new ErrorNegocio(400, "Ingresa un correo electrónico válido");
+  if (telefono.length > 30) throw new ErrorNegocio(400, "Teléfono demasiado largo");
+  if (mensaje.length < 5 || mensaje.length > 2000) throw new ErrorNegocio(400, "Escribe tu mensaje (mínimo 5 caracteres)");
+
+  const pedidoCodigo = String(datos.pedido_codigo || "").trim().toUpperCase().slice(0, 20);
+  const detalle = tipo === "personalizado" ? limpiarDetalle(datos.detalle) : null;
+
+  const fila = await ctx.insertar("mensajes", {
+    codigo: await codigoUnico(ctx, "mensajes", tipo === "personalizado" ? "PP" : "MS"),
+    tipo,
+    nombre,
+    email,
+    telefono,
+    mensaje,
+    pedido_codigo: pedidoCodigo,
+    detalle: detalle ? JSON.stringify(detalle) : "",
+    estado: "NUEVO",
+    nota: "",
+    fecha: ahora(),
+  });
+  return mapearMensaje(fila);
+}
+
+function mapearMensaje(r) {
+  return {
+    id: r.id,
+    codigo: r.codigo,
+    tipo: r.tipo,
+    nombre: r.nombre,
+    email: r.email,
+    telefono: r.telefono || "",
+    mensaje: r.mensaje,
+    pedido_codigo: r.pedido_codigo || "",
+    detalle: r.detalle ? parsear(r.detalle, null) : null,
+    estado: r.estado,
+    nota: r.nota || "",
+    fecha: r.fecha,
+    atendido_por: r.atendido_por || null,
+    atendido_fecha: r.atendido_fecha || null,
+  };
+}
+
+async function listarMensajes(ctx) {
+  const filas = await ctx.lista("mensajes", {}, { orden: "id DESC" });
+  const pedidos = await ctx.lista("pedidos");
+  const porCodigo = new Map(pedidos.filter((p) => p.codigo).map((p) => [String(p.codigo).toUpperCase(), p]));
+  return filas.map((r) => {
+    const m = mapearMensaje(r);
+    // Si el cliente indicó un código de pedido válido, se enlaza para que el admin lo ubique.
+    const p = m.pedido_codigo ? porCodigo.get(m.pedido_codigo) : null;
+    m.pedido_encontrado = !!p;
+    m.pedido_estado = p ? normalizarEstado(p.estado) : null;
+    return m;
+  });
+}
+
+async function actualizarMensaje(ctx, id, { estado, nota }, usuario) {
+  const r = await ctx.uno("mensajes", { id: Number(id) });
+  if (!r) throw new ErrorNegocio(404, "Mensaje no encontrado");
+  if (!ESTADOS_MENSAJE.includes(estado)) throw new ErrorNegocio(400, "Estado no válido");
+  const cambios = {
+    estado,
+    nota: nota === undefined || nota === null ? r.nota || "" : String(nota).slice(0, 500),
+    atendido_por: usuario,
+    atendido_fecha: ahora(),
+  };
+  return mapearMensaje(await ctx.actualizar("mensajes", { id: r.id }, cambios));
+}
+
 // ---------------------------------------------------------------- Reportes
 async function reportes(ctx, { desde, hasta }) {
   await vencerReservas(ctx);
@@ -779,6 +872,21 @@ const ESQUEMA = [
     talla NVARCHAR(20) NULL,
     cantidad INT NULL,
     reingresado INT NOT NULL DEFAULT 0)`,
+  `IF OBJECT_ID('mensajes','U') IS NULL CREATE TABLE mensajes (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    codigo NVARCHAR(20) NOT NULL,
+    tipo NVARCHAR(20) NOT NULL,
+    nombre NVARCHAR(120) NOT NULL,
+    email NVARCHAR(150) NOT NULL,
+    telefono NVARCHAR(30) NOT NULL DEFAULT '',
+    mensaje NVARCHAR(2000) NOT NULL,
+    pedido_codigo NVARCHAR(20) NOT NULL DEFAULT '',
+    detalle NVARCHAR(MAX) NOT NULL DEFAULT '',
+    estado NVARCHAR(20) NOT NULL,
+    nota NVARCHAR(500) NOT NULL DEFAULT '',
+    fecha VARCHAR(19) NOT NULL,
+    atendido_por NVARCHAR(50) NULL,
+    atendido_fecha VARCHAR(19) NULL)`,
   `IF OBJECT_ID('configuracion','U') IS NULL CREATE TABLE configuracion (
     clave NVARCHAR(50) PRIMARY KEY,
     valor NVARCHAR(MAX) NULL)`,
@@ -789,7 +897,8 @@ async function asegurarEsquema(ctx) {
 }
 
 module.exports = {
-  ErrorNegocio, ESTADOS_PEDIDO, MEDIOS_PAGO, TIPOS_RECLAMO, ESQUEMA,
+  ErrorNegocio, ESTADOS_PEDIDO, MEDIOS_PAGO, TIPOS_RECLAMO, TIPOS_MENSAJE, ESTADOS_MENSAJE, ESQUEMA,
+  crearMensaje, listarMensajes, actualizarMensaje,
   setReloj, ahora, sumarMinutos, mapearPedido,
   leerConfig, guardarConfig, anotarDisponibilidad,
   crearPedido, vencerReservas, listarPedidos, detallePedido, seguimiento,
