@@ -26,7 +26,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   try {
     const guardado = localStorage.getItem("cp_pedido");
-    if (guardado) mostrarChipPedido(guardado);
+    if (guardado) verificarChipPedido(guardado);
   } catch (e) {}
 
   iniciarScrollEvents();
@@ -634,6 +634,58 @@ function mostrarChipPedido(codigo) {
   chip.classList.remove("hidden");
 }
 
+// Olvida el pedido guardado en este navegador y oculta el botón flotante "Mi pedido".
+function olvidarPedido() {
+  try { localStorage.removeItem("cp_pedido"); } catch (e) {}
+  const chip = document.getElementById("pedidoChip");
+  if (chip) chip.classList.add("hidden");
+}
+
+// Al cargar la página: el botón "Mi pedido" solo se muestra si el pedido sigue vigente.
+async function verificarChipPedido(codigo) {
+  try {
+    const rs = await fetch("/api/seguimiento?codigo=" + encodeURIComponent(codigo));
+    if (rs.status === 404) { olvidarPedido(); return; }
+    if (rs.ok) {
+      const seg = await rs.json();
+      if (seg.estado === "CANCELADO") { olvidarPedido(); return; }
+    }
+  } catch (e) { /* sin conexión: se muestra igual */ }
+  mostrarChipPedido(codigo);
+}
+
+// El cliente cancela su pedido (aún sin pago informado).
+async function cancelarMiPedido(codigo) {
+  if (!confirm("¿Seguro que quieres cancelar el pedido " + codigo + "? Liberaremos tu reserva y no podrás recuperarla.")) return;
+  const btn = document.getElementById("btnCancelarPedido");
+  if (btn) { btn.disabled = true; btn.textContent = "Cancelando..."; }
+  try {
+    const r = await fetch("/api/pedidos/cancelar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ codigo }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || "No se pudo cancelar el pedido");
+    mostrarToast("✓ Pedido cancelado");
+    mostrarPanelPedido(codigo); // muestra el estado "Cancelado" y quita el botón "Mi pedido"
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = "Cancelar mi pedido"; }
+    mostrarToast(e.message, 5000);
+  }
+}
+
+// Lleva al formulario de contacto con el tipo y el código de pedido ya completados.
+function contactarPorPedido(codigo, tipo) {
+  cerrarCheckout();
+  const sel = document.getElementById("contactType");
+  if (sel) { sel.value = tipo; cambiarTipoContacto(tipo); }
+  const ped = document.getElementById("contactOrder");
+  if (ped) ped.value = codigo;
+  const sec = document.getElementById("contacto");
+  if (sec) sec.scrollIntoView({ behavior: "smooth" });
+}
+
 function abrirSeguimiento() {
   let codigo = "";
   try { codigo = localStorage.getItem("cp_pedido") || ""; } catch (e) {}
@@ -668,11 +720,11 @@ async function mostrarPanelPedido(codigo) {
     seg = await rs.json();
     if (!rs.ok) {
       panel.innerHTML = `<p class="text-center">${escHtml(seg.error || "No se pudo consultar el pedido")}</p>`;
-      try { if (rs.status === 404) localStorage.removeItem("cp_pedido"); } catch (e) {}
-      const chip = document.getElementById("pedidoChip");
-      if (chip && rs.status === 404) chip.classList.add("hidden");
+      if (rs.status === 404) olvidarPedido();
       return;
     }
+    // Un pedido cancelado ya no se muestra como "Mi pedido" en este navegador.
+    if (seg.estado === "CANCELADO") olvidarPedido();
     cfg = await (await fetch("/api/config")).json();
   } catch (e) {
     panel.innerHTML = '<p class="text-center">No se pudo conectar. Intenta de nuevo.</p>';
@@ -739,6 +791,15 @@ async function mostrarPanelPedido(codigo) {
       </div>`;
   } else if (seg.estado === "RESERVADO" && enRevision) {
     html += '<p class="pago-nota">Cuando validemos tu pago verás aquí el cambio de estado. Puedes volver con tu código desde "Mi pedido".</p>';
+  }
+
+  // Cancelar: el cliente puede hacerlo mientras no haya informado un pago.
+  const codigoAttr = escHtml(seg.codigo);
+  if (["PENDIENTE", "RESERVADO"].includes(seg.estado) && !enRevision) {
+    html += `<button class="btn btn-outline btn-full" id="btnCancelarPedido" style="margin-top:.8rem;color:#a32d2d;border-color:#e3b5b3" onclick="cancelarMiPedido('${codigoAttr}')">Cancelar mi pedido</button>
+      <p class="pago-nota">¿Te arrepentiste o no vas a pagar? Cancélalo y liberamos tu reserva.</p>`;
+  } else if (["RESERVADO", "PAGO_VALIDADO", "EN_PREPARACION"].includes(seg.estado)) {
+    html += `<p class="pago-nota">¿Necesitas cancelar o cambiar algo? <a href="#contacto" onclick="contactarPorPedido('${codigoAttr}', 'cambio'); return false;">Escríbenos aquí</a> con tu código.</p>`;
   }
 
   html += '<button class="btn btn-outline btn-full" style="margin-top:.8rem" onclick="cerrarCheckout()">Cerrar</button>';
