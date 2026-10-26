@@ -1420,10 +1420,30 @@ img { max-width: 100%; display: block; }
 .pago-qrs figure { margin: 0; text-align: center; }
 .pago-qrs img { width: 150px; height: 150px; object-fit: contain; background: #fff; border: 1px solid var(--crema-oscura); border-radius: 10px; padding: 6px; }
 .pago-qrs figcaption { font-size: .78rem; color: var(--texto-suave); margin-top: 4px; }
+.voucher-titulo { display: block; font-size: 13px; font-weight: 500; color: var(--texto-suave); letter-spacing: 0.04em; margin-bottom: 6px; }
+.voucher-titulo small { font-weight: 400; }
 .voucher-drop {
-  display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;
-  border: 2px dashed var(--crema-oscura); border-radius: 12px; padding: 14px; background: var(--blanco);
-  font-size: .9rem; color: var(--texto-suave); transition: border-color .2s, background .2s; text-align: center;
+  position: relative; display: flex; align-items: center;
+  border: 1.5px dashed var(--crema-oscura); border-radius: var(--radio); background: var(--blanco);
+  transition: border-color var(--transicion), background var(--transicion), box-shadow var(--transicion);
 }
-.voucher-drop:hover { border-color: var(--dorado); background: #fbf3dc; }
-.voucher-drop img { max-width: 100%; max-height: 180px; border-radius: 8px; }
+.voucher-drop:hover, .voucher-drop:focus-within { border-color: var(--dorado); background: #fbf3dc; }
+.voucher-drop:focus-within { box-shadow: 0 0 0 3px rgba(201,168,76,0.18); }
+.voucher-drop.tiene-archivo { border-style: solid; border-color: var(--dorado); }
+/* Input real oculto visualmente (accesible por teclado); lo abre el label */
+.voucher-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
+.voucher-zona {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; cursor: pointer;
+  padding: 12px 14px; font-size: .9rem; color: var(--texto-suave);
+}
+.voucher-icono { width: 22px; height: 22px; flex: none; stroke: var(--dorado); fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.voucher-mini { width: 44px; height: 44px; flex: none; object-fit: cover; border-radius: 8px; border: 1px solid var(--crema-oscura); }
+.voucher-textos { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
+.voucher-principal { color: var(--texto); font-size: .9rem; }
+.voucher-sub { font-size: .76rem; color: var(--texto-suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.voucher-quitar {
+  flex: none; width: 28px; height: 28px; margin-right: 10px; border-radius: 50%;
+  border: 1px solid var(--crema-oscura); background: transparent; color: var(--texto-suave);
+  font-size: 1.1rem; line-height: 1; cursor: pointer; transition: border-color .2s, color .2s;
+}
+.voucher-quitar:hover { border-color: #a32d2d; color: #a32d2d; }
