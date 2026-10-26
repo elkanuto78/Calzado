@@ -876,6 +876,31 @@ function validateField(field) {
   field.classList.toggle("valid", errorMsg === "" && val.length > 0);
 }
 
+// Muestra u oculta los campos extra según el tipo de solicitud elegido.
+function cambiarTipoContacto(tipo) {
+  document.getElementById("grupoPedido").classList.toggle("hidden", !(tipo === "cambio" || tipo === "reclamo"));
+  document.getElementById("grupoPersonalizado").classList.toggle("hidden", tipo !== "personalizado");
+  const msg = document.getElementById("contactMsg");
+  const ayudas = {
+    consulta: "¿En qué podemos ayudarte?",
+    cambio: "Cuéntanos qué deseas cambiar (talla, color, modelo)...",
+    reclamo: "Cuéntanos qué ocurrió con tu pedido...",
+    personalizado: "Describe el calzado que quieres: diseño, materiales, detalles...",
+  };
+  msg.placeholder = ayudas[tipo] || ayudas.consulta;
+}
+
+// Vuelve a mostrar el formulario vacío después de un envío exitoso.
+function nuevoMensajeContacto() {
+  const form = document.getElementById("contactForm");
+  form.reset();
+  form.querySelectorAll(".form-control").forEach((c) => c.classList.remove("valid", "error"));
+  form.querySelectorAll(".field-error").forEach((e) => (e.textContent = ""));
+  cambiarTipoContacto("consulta");
+  form.classList.remove("hidden");
+  document.getElementById("formSuccess").classList.add("hidden");
+}
+
 function formatPhone(input) {
   let val = input.value.replace(/[^\d+]/g, "");
   if (val.startsWith("51") && val.length > 2) {
@@ -912,29 +937,55 @@ async function submitForm(e) {
     btnEnviar.textContent = "Enviando...";
   }
 
+  const tipo = document.getElementById("contactType").value;
+  const payload = {
+    tipo,
+    nombre: name.value.trim(),
+    email: email.value.trim(),
+    telefono: phone ? phone.value.trim() : "",
+    mensaje: msg.value.trim(),
+  };
+  if (tipo === "cambio" || tipo === "reclamo") {
+    payload.pedido_codigo = document.getElementById("contactOrder").value.trim();
+  }
+  if (tipo === "personalizado") {
+    payload.detalle = {
+      modelo: document.getElementById("customModel").value.trim(),
+      color: document.getElementById("customColor").value.trim(),
+      talla: document.getElementById("customSize").value.trim(),
+      cantidad: document.getElementById("customQty").value.trim(),
+    };
+  }
+
+  // Si el servidor no responde en 20 s se corta, para que el botón nunca quede en "Enviando...".
+  const control = new AbortController();
+  const corte = setTimeout(() => control.abort(), 20000);
   try {
     const resp = await fetch("/api/contacto", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        nombre: name.value.trim(),
-        email: email.value.trim(),
-        telefono: phone ? phone.value.trim() : "",
-        mensaje: msg.value.trim(),
-      }),
+      body: JSON.stringify(payload),
+      signal: control.signal,
     });
 
-    if (!resp.ok) {
-      const data = await resp.json().catch(() => ({}));
-      throw new Error(data.error || "No se pudo enviar tu mensaje.");
-    }
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || "No se pudo enviar tu mensaje.");
 
+    const codigoEl = document.getElementById("formSuccessCode");
+    if (data.codigo) {
+      codigoEl.textContent = "Tu código de seguimiento: " + data.codigo;
+      codigoEl.classList.remove("hidden");
+    } else {
+      codigoEl.classList.add("hidden");
+    }
     document.getElementById("contactForm").classList.add("hidden");
     document.getElementById("formSuccess").classList.remove("hidden");
     mostrarToast("✓ Mensaje enviado con éxito");
   } catch (err) {
-    mostrarToast("⚠ " + err.message);
+    const mensaje = err.name === "AbortError" ? "El servidor tardó demasiado en responder. Intenta de nuevo." : err.message;
+    mostrarToast("⚠ " + mensaje, 5000);
   } finally {
+    clearTimeout(corte);
     if (btnEnviar) {
       btnEnviar.disabled = false;
       btnEnviar.textContent = textoOriginal;
